@@ -937,7 +937,11 @@ pub const LuaState = struct {
                     
                     // Get upvalue from current closure
                     if (current_closure.upvalues.len > b) {
-                        self.stack[base + a] = current_closure.upvalues[b].value.*;
+                        if (current_closure.upvalues[b]) |upval| {
+                            self.stack[base + a] = upval.value.*;
+                        } else {
+                            self.stack[base + a] = .nil;
+                        }
                     } else {
                         self.stack[base + a] = .nil;
                     }
@@ -949,7 +953,9 @@ pub const LuaState = struct {
                     
                     // Set upvalue in current closure
                     if (current_closure.upvalues.len > b) {
-                        current_closure.upvalues[b].value.* = self.stack[base + a];
+                        if (current_closure.upvalues[b]) |upval| {
+                            upval.value.* = self.stack[base + a];
+                        }
                     }
                 },
                 .call => {
