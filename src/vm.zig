@@ -217,6 +217,7 @@ pub const LuaState = struct {
 
     pub fn getGlobal(self: *Self, name: []const u8) !void {
         const str = try String.init(self.allocator, name);
+        defer str.deinit(self.allocator);
         const value = self.globals.get(.{ .string = str });
         try self.push(value);
     }
@@ -233,6 +234,7 @@ pub const LuaState = struct {
             return;
         };
         const str = try String.init(self.allocator, k);
+        defer str.deinit(self.allocator);
         const v = t.get(.{ .string = str });
         try self.push(v);
     }
