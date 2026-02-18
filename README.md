@@ -1,7 +1,7 @@
 Zua
 ===
 
-An attempt at a [Lua](https://lua.org) 5.1 implementation in [Zig](https://ziglang.org).
+An attempt at a [Lua](https://lua.org) 5.1 implementation in [Zig](https://ziglang.org) v0.15.2 .
 
 Goals, in order of priority:
 1. Learn more about Lua internals
