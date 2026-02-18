@@ -14,71 +14,71 @@ const CClosure = @import("object.zig").CClosure;
 pub fn openBase(L: *LuaState) void {
     L.pushCFunction(base_print) catch return;
     _ = L.setGlobal("print");
-    
+
     L.pushCFunction(base_type) catch return;
     _ = L.setGlobal("type");
-    
+
     L.pushCFunction(base_tostring) catch return;
     _ = L.setGlobal("tostring");
-    
+
     L.pushCFunction(base_tonumber) catch return;
     _ = L.setGlobal("tonumber");
-    
+
     L.pushCFunction(base_error) catch return;
     _ = L.setGlobal("error");
-    
+
     L.pushCFunction(base_assert) catch return;
     _ = L.setGlobal("assert");
-    
+
     L.pushCFunction(base_pairs) catch return;
     _ = L.setGlobal("pairs");
-    
+
     L.pushCFunction(base_next) catch return;
     _ = L.setGlobal("next");
-    
+
     L.pushCFunction(base_ipairs) catch return;
     _ = L.setGlobal("ipairs");
-    
+
     L.pushCFunction(base_pcall) catch return;
     _ = L.setGlobal("pcall");
-    
+
     L.pushCFunction(base_select) catch return;
     _ = L.setGlobal("select");
-    
+
     L.pushCFunction(base_getmetatable) catch return;
     _ = L.setGlobal("getmetatable");
-    
+
     L.pushCFunction(base_setmetatable) catch return;
     _ = L.setGlobal("setmetatable");
-    
+
     L.pushCFunction(base_rawget) catch return;
     _ = L.setGlobal("rawget");
-    
+
     L.pushCFunction(base_rawset) catch return;
     _ = L.setGlobal("rawset");
-    
+
     L.pushCFunction(base_rawequal) catch return;
     _ = L.setGlobal("rawequal");
-    
+
     L.pushCFunction(base_setfenv) catch return;
     _ = L.setGlobal("setfenv");
-    
+
     L.pushCFunction(base_getfenv) catch return;
     _ = L.setGlobal("getfenv");
-    
+
     L.pushCFunction(base_loadstring) catch return;
     _ = L.setGlobal("loadstring");
-    
+
     L.pushCFunction(base_loadfile) catch return;
     _ = L.setGlobal("loadfile");
-    
+
     L.pushCFunction(base_dofile) catch return;
     _ = L.setGlobal("dofile");
-    
+
     // Register _G
     L.pushValue(.{ .table = L.globals }) catch return;
     _ = L.setGlobal("_G");
-    
+
     // Register _VERSION
     L.pushString("Lua 5.1") catch return;
     _ = L.setGlobal("_VERSION");
@@ -89,7 +89,7 @@ fn base_print(L: *LuaState) callconv(.c) i32 {
     var stdout_buf: [4096]u8 = undefined;
     const stdout_file = std.fs.File.stdout();
     var stdout = stdout_file.writer(&stdout_buf);
-    
+
     var i: i32 = 1;
     while (i <= n) : (i += 1) {
         if (i > 1) {
@@ -125,7 +125,7 @@ fn base_type(L: *LuaState) callconv(.C) i32 {
 
 fn base_tostring(L: *LuaState) callconv(.C) i32 {
     const val = L.toValue(1);
-    
+
     switch (val) {
         .nil => {
             L.pushString("nil") catch return 0;
@@ -138,7 +138,7 @@ fn base_tostring(L: *LuaState) callconv(.C) i32 {
             const str = std.fmt.bufPrint(&buf, "{d}", .{n}) catch "NaN";
             L.pushString(str) catch return 0;
         },
-        .string => |s| {
+        .string => {
             L.pushValue(val) catch return 0;
         },
         .table => {
@@ -169,11 +169,11 @@ fn base_tonumber(L: *LuaState) callconv(.C) i32 {
         L.pushNumber(n) catch return 0;
         return 1;
     }
-    
+
     if (L.isString(1)) {
         const str = L.toString(1) orelse "";
         const base: i32 = if (L.getTop() >= 2) @intFromFloat(L.toNumber(2) orelse 10) else 10;
-        
+
         if (base == 10) {
             if (std.fmt.parseFloat(f64, str)) |n| {
                 L.pushNumber(n) catch return 0;
@@ -186,7 +186,7 @@ fn base_tonumber(L: *LuaState) callconv(.C) i32 {
             } else |_| {}
         }
     }
-    
+
     L.pushNil() catch return 0;
     return 1;
 }
@@ -206,7 +206,7 @@ fn base_assert(L: *LuaState) callconv(.C) i32 {
     if (L.toBoolean(1)) {
         return L.getTop();
     }
-    
+
     if (L.getTop() >= 2) {
         const val = L.toValue(2);
         L.pushValue(val) catch return 0;
@@ -247,13 +247,13 @@ fn ipairs_aux(L: *LuaState) callconv(.C) i32 {
 
 fn base_pcall(L: *LuaState) callconv(.C) i32 {
     const n = L.getTop();
-    
+
     L.call(n - 1, -1) catch {
         L.pushBoolean(false);
         L.insert(-2) catch {};
         return 2;
     };
-    
+
     L.pushBoolean(true);
     L.insert(-2) catch {};
     return L.getTop();
@@ -261,7 +261,7 @@ fn base_pcall(L: *LuaState) callconv(.C) i32 {
 
 fn base_select(L: *LuaState) callconv(.C) i32 {
     const n = L.getTop();
-    
+
     if (L.isString(1)) {
         const s = L.toString(1) orelse "";
         if (s.len > 0 and s[0] == '#') {
@@ -269,7 +269,7 @@ fn base_select(L: *LuaState) callconv(.C) i32 {
             return 1;
         }
     }
-    
+
     const idx = L.toNumber(1) orelse 1;
     if (idx < 0) {
         const count = @as(i32, @intFromFloat(-(idx))) + 1;
@@ -288,13 +288,13 @@ fn base_select(L: *LuaState) callconv(.C) i32 {
         }
         return n - @as(i32, @intFromFloat(idx));
     }
-    
+
     return 0;
 }
 
 fn base_getmetatable(L: *LuaState) callconv(.C) i32 {
     const val = L.toValue(1);
-    
+
     switch (val) {
         .table => |t| {
             if (t.metatable) |mt| {
@@ -312,15 +312,15 @@ fn base_getmetatable(L: *LuaState) callconv(.C) i32 {
 
 fn base_setmetatable(L: *LuaState) callconv(.C) i32 {
     if (!L.isTable(1)) return 0;
-    
+
     const t = L.toTable(1) orelse return 0;
-    
+
     if (L.isNil(2)) {
         t.metatable = null;
     } else if (L.isTable(2)) {
         t.metatable = L.toTable(2);
     }
-    
+
     L.pushValue(L.toValue(1)) catch return 0;
     return 1;
 }
@@ -352,7 +352,7 @@ fn base_rawequal(L: *LuaState) callconv(.C) i32 {
 fn base_setfenv(L: *LuaState) callconv(.C) i32 {
     const n = L.getTop();
     if (n < 1) return 0;
-    
+
     // TODO: Implement proper fenv handling
     // For now, just return the argument
     L.pushValue(L.toValue(1)) catch return 0;
@@ -374,19 +374,19 @@ fn base_getfenv(L: *LuaState) callconv(.C) i32 {
 
 fn base_loadstring(L: *LuaState) callconv(.C) i32 {
     const source = L.toString(1) orelse "";
-    
+
     L.load(source, "[string]") catch {
         L.pushNil();
         L.pushString("error loading string") catch {};
         return 2;
     };
-    
+
     return 1;
 }
 
 fn base_loadfile(L: *LuaState) callconv(.C) i32 {
     const filename = L.toString(1) orelse "";
-    
+
     const file = std.fs.cwd().openFile(filename, .{}) catch {
         L.pushNil();
         var buf: [256]u8 = undefined;
@@ -395,32 +395,32 @@ fn base_loadfile(L: *LuaState) callconv(.C) i32 {
         return 2;
     };
     defer file.close();
-    
+
     const source = file.readToEndAlloc(L.allocator, 1024 * 1024) catch {
         L.pushNil();
         L.pushString("error reading file") catch {};
         return 2;
     };
     defer L.allocator.free(source);
-    
+
     L.load(source, filename) catch {
         L.pushNil();
         L.pushString("error loading file") catch {};
         return 2;
     };
-    
+
     return 1;
 }
 
 fn base_dofile(L: *LuaState) callconv(.C) i32 {
     const filename = if (L.getTop() >= 1) L.toString(1) else null;
-    
+
     if (filename) |f| {
         L.load(f, f) catch return 0;
     } else {
         L.load("", "[string]") catch return 0;
     }
-    
+
     const n = L.getTop() - 1;
     L.call(0, -1) catch return 0;
     return L.getTop() - n;
@@ -433,22 +433,22 @@ fn base_dofile(L: *LuaState) callconv(.C) i32 {
 pub fn openTable(L: *LuaState) void {
     L.pushCFunction(table_getn) catch return;
     L.setGlobal("table.getn") catch return;
-    
+
     L.pushCFunction(table_setn) catch return;
     L.setGlobal("table.setn") catch return;
-    
+
     L.pushCFunction(table_insert) catch return;
     L.setGlobal("table.insert") catch return;
-    
+
     L.pushCFunction(table_remove) catch return;
     L.setGlobal("table.remove") catch return;
-    
+
     L.pushCFunction(table_concat) catch return;
     L.setGlobal("table.concat") catch return;
-    
+
     L.pushCFunction(table_sort) catch return;
     L.setGlobal("table.sort") catch return;
-    
+
     L.pushCFunction(table_maxn) catch return;
     L.setGlobal("table.maxn") catch return;
 }
@@ -471,7 +471,7 @@ fn table_setn(L: *LuaState) callconv(.C) i32 {
 fn table_insert(L: *LuaState) callconv(.C) i32 {
     const t = L.toTable(1) orelse return 0;
     const n = L.getTop();
-    
+
     if (n == 2) {
         // Insert at end
         const pos = t.length() + 1;
@@ -480,7 +480,7 @@ fn table_insert(L: *LuaState) callconv(.C) i32 {
         // Insert at position
         const pos: usize = @intFromFloat(L.toNumber(2) orelse 1);
         const len = t.length();
-        
+
         // Shift elements
         var i: usize = len;
         while (i >= pos) : (i -= 1) {
@@ -489,7 +489,7 @@ fn table_insert(L: *LuaState) callconv(.C) i32 {
         }
         t.set(.{ .number = @floatFromInt(pos) }, L.toValue(3)) catch return 0;
     }
-    
+
     return 0;
 }
 
@@ -498,21 +498,21 @@ fn table_remove(L: *LuaState) callconv(.C) i32 {
         L.pushNil();
         return 1;
     };
-    
+
     const len = t.length();
     if (len == 0) {
         L.pushNil();
         return 1;
     }
-    
-    const pos: usize = if (L.getTop() >= 2) 
-        @intFromFloat(L.toNumber(2) orelse @floatFromInt(len))
-    else 
+
+    const pos: usize = if (L.getTop() >= 2)
+        @intFromFloat(L.toNumber(2) orelse @as(f64, @floatFromInt(len)))
+    else
         len;
-    
+
     const val = t.get(.{ .number = @floatFromInt(pos) });
     L.pushValue(val) catch return 0;
-    
+
     // Shift elements
     var i: usize = pos;
     while (i < len) : (i += 1) {
@@ -520,7 +520,7 @@ fn table_remove(L: *LuaState) callconv(.C) i32 {
         t.set(.{ .number = @floatFromInt(i) }, next_val) catch return 0;
     }
     t.set(.{ .number = @floatFromInt(len) }, .nil) catch return 0;
-    
+
     return 1;
 }
 
@@ -529,19 +529,19 @@ fn table_concat(L: *LuaState) callconv(.C) i32 {
         L.pushString("");
         return 1;
     };
-    
+
     const sep = if (L.getTop() >= 2) L.toString(2) else "";
-    const start: usize = if (L.getTop() >= 3) 
+    const start: usize = if (L.getTop() >= 3)
         @intFromFloat(L.toNumber(3) orelse 1)
-    else 
+    else
         1;
-    const end: usize = if (L.getTop() >= 4) 
+    const end: usize = if (L.getTop() >= 4)
         @intFromFloat(L.toNumber(4) orelse @as(f64, @floatFromInt(t.length())))
-    else 
+    else
         t.length();
-    
+
     var result = std.ArrayList(u8).init(L.allocator);
-    
+
     var i: usize = start;
     while (i <= end) : (i += 1) {
         if (i > start and sep.len > 0) {
@@ -556,28 +556,28 @@ fn table_concat(L: *LuaState) callconv(.C) i32 {
             result.appendSlice(str) catch {};
         }
     }
-    
+
     const str = result.toOwnedSlice() catch "";
     L.pushString(str) catch {};
     L.allocator.free(str);
-    
+
     return 1;
 }
 
 fn table_sort(L: *LuaState) callconv(.C) i32 {
     const t = L.toTable(1) orelse return 0;
-    
+
     // Collect all array elements
     var elements = std.ArrayList(Value).init(L.allocator);
     defer elements.deinit();
-    
+
     const len = t.length();
     var i: usize = 1;
     while (i <= len) : (i += 1) {
         const val = t.get(.{ .number = @floatFromInt(i) });
         try elements.append(val);
     }
-    
+
     // Simple insertion sort
     var j: usize = 1;
     while (j < elements.items.len) : (j += 1) {
@@ -588,7 +588,7 @@ fn table_sort(L: *LuaState) callconv(.C) i32 {
             const a = elements.items[k];
             const b = key;
             var less = false;
-            
+
             switch (a) {
                 .number => |n1| {
                     if (b == .number) {
@@ -606,21 +606,21 @@ fn table_sort(L: *LuaState) callconv(.C) i32 {
                 },
                 else => {},
             }
-            
+
             if (!less) break;
             elements.items[k + 1] = elements.items[k];
             if (k == 0) break;
         }
         elements.items[k + 1] = key;
     }
-    
+
     // Write sorted elements back to the table
     i = 1;
     for (elements.items) |val| {
         t.set(.{ .number = @floatFromInt(i) }, val) catch return 0;
         i += 1;
     }
-    
+
     return 0;
 }
 
@@ -629,7 +629,7 @@ fn table_maxn(L: *LuaState) callconv(.C) i32 {
         L.pushNumber(0);
         return 1;
     };
-    
+
     var max: f64 = 0;
     var iter = t.map.iterator();
     while (iter.next()) |entry| {
@@ -640,7 +640,7 @@ fn table_maxn(L: *LuaState) callconv(.C) i32 {
             }
         }
     }
-    
+
     L.pushNumber(max);
     return 1;
 }
@@ -652,28 +652,28 @@ fn table_maxn(L: *LuaState) callconv(.C) i32 {
 pub fn openString(L: *LuaState) void {
     L.pushCFunction(string_len) catch return;
     L.setGlobal("string.len") catch return;
-    
+
     L.pushCFunction(string_sub) catch return;
     L.setGlobal("string.sub") catch return;
-    
+
     L.pushCFunction(string_lower) catch return;
     L.setGlobal("string.lower") catch return;
-    
+
     L.pushCFunction(string_upper) catch return;
     L.setGlobal("string.upper") catch return;
-    
+
     L.pushCFunction(string_rep) catch return;
     L.setGlobal("string.rep") catch return;
-    
+
     L.pushCFunction(string_find) catch return;
     L.setGlobal("string.find") catch return;
-    
+
     L.pushCFunction(string_format) catch return;
     L.setGlobal("string.format") catch return;
-    
+
     L.pushCFunction(string_byte) catch return;
     L.setGlobal("string.byte") catch return;
-    
+
     L.pushCFunction(string_char) catch return;
     L.setGlobal("string.char") catch return;
 }
@@ -687,26 +687,26 @@ fn string_len(L: *LuaState) callconv(.C) i32 {
 fn string_sub(L: *LuaState) callconv(.C) i32 {
     const s = L.toString(1) orelse "";
     const len: i32 = @intCast(s.len);
-    
+
     var start: i32 = @intFromFloat(L.toNumber(2) orelse 1);
     if (start < 0) start = len + start + 1;
     if (start < 1) start = 1;
-    
-    var end: i32 = if (L.getTop() >= 3) 
+
+    var end: i32 = if (L.getTop() >= 3)
         @intFromFloat(L.toNumber(3) orelse @as(f64, @floatFromInt(len)))
-    else 
+    else
         len;
     if (end < 0) end = len + end + 1;
     if (end > len) end = len;
-    
+
     if (start > end) {
         L.pushString("");
         return 1;
     }
-    
+
     const start_idx: usize = @intCast(start - 1);
     const end_idx: usize = @intCast(end);
-    
+
     L.pushString(s[start_idx..end_idx]) catch return 0;
     return 1;
 }
@@ -714,11 +714,11 @@ fn string_sub(L: *LuaState) callconv(.C) i32 {
 fn string_lower(L: *LuaState) callconv(.C) i32 {
     const s = L.toString(1) orelse "";
     var result = std.ArrayList(u8).init(L.allocator);
-    
+
     for (s) |c| {
         result.append(std.ascii.toLower(c)) catch {};
     }
-    
+
     const str = result.toOwnedSlice() catch "";
     L.pushString(str) catch {};
     L.allocator.free(str);
@@ -728,11 +728,11 @@ fn string_lower(L: *LuaState) callconv(.C) i32 {
 fn string_upper(L: *LuaState) callconv(.C) i32 {
     const s = L.toString(1) orelse "";
     var result = std.ArrayList(u8).init(L.allocator);
-    
+
     for (s) |c| {
         result.append(std.ascii.toUpper(c)) catch {};
     }
-    
+
     const str = result.toOwnedSlice() catch "";
     L.pushString(str) catch {};
     L.allocator.free(str);
@@ -742,13 +742,13 @@ fn string_upper(L: *LuaState) callconv(.C) i32 {
 fn string_rep(L: *LuaState) callconv(.C) i32 {
     const s = L.toString(1) orelse "";
     const n: usize = @intFromFloat(L.toNumber(2) orelse 0);
-    
+
     var result = std.ArrayList(u8).init(L.allocator);
     var i: usize = 0;
     while (i < n) : (i += 1) {
         result.appendSlice(s) catch {};
     }
-    
+
     const str = result.toOwnedSlice() catch "";
     L.pushString(str) catch {};
     L.allocator.free(str);
@@ -758,31 +758,31 @@ fn string_rep(L: *LuaState) callconv(.C) i32 {
 fn string_find(L: *LuaState) callconv(.C) i32 {
     const s = L.toString(1) orelse "";
     const pattern = L.toString(2) orelse "";
-    
+
     // Simple string find (no pattern matching)
     const start_idx: usize = if (L.getTop() >= 3)
         @intFromFloat(@max(1, L.toNumber(3) orelse 1) - 1)
     else
         0;
-    
+
     if (std.mem.indexOfPos(u8, s, start_idx, pattern)) |idx| {
         L.pushNumber(@floatFromInt(idx + 1));
         L.pushNumber(@floatFromInt(idx + pattern.len));
         return 2;
     }
-    
+
     L.pushNil();
     return 1;
 }
 
 fn string_format(L: *LuaState) callconv(.C) i32 {
     const fmt = L.toString(1) orelse "";
-    
+
     // Very simplified format implementation
     var result = std.ArrayList(u8).init(L.allocator);
     var arg_idx: i32 = 2;
     var i: usize = 0;
-    
+
     while (i < fmt.len) {
         if (fmt[i] == '%' and i + 1 < fmt.len) {
             i += 1;
@@ -823,7 +823,7 @@ fn string_format(L: *LuaState) callconv(.C) i32 {
         }
         i += 1;
     }
-    
+
     const str = result.toOwnedSlice() catch "";
     L.pushString(str) catch {};
     L.allocator.free(str);
@@ -833,13 +833,13 @@ fn string_format(L: *LuaState) callconv(.C) i32 {
 fn string_byte(L: *LuaState) callconv(.C) i32 {
     const s = L.toString(1) orelse "";
     const len: i32 = @intCast(s.len);
-    
+
     const start: i32 = @intFromFloat(L.toNumber(2) orelse 1);
-    const end: i32 = if (L.getTop() >= 3) 
+    const end: i32 = if (L.getTop() >= 3)
         @intFromFloat(L.toNumber(3) orelse @as(f64, @floatFromInt(start)))
-    else 
+    else
         start;
-    
+
     var count: i32 = 0;
     var i: i32 = start;
     while (i <= end and i <= len) : (i += 1) {
@@ -848,20 +848,20 @@ fn string_byte(L: *LuaState) callconv(.C) i32 {
             count += 1;
         }
     }
-    
+
     return count;
 }
 
 fn string_char(L: *LuaState) callconv(.C) i32 {
     const n = L.getTop();
     var result = std.ArrayList(u8).init(L.allocator);
-    
+
     var i: i32 = 1;
     while (i <= n) : (i += 1) {
         const c: u8 = @intFromFloat(@mod(L.toNumber(i) orelse 0, 256));
         result.append(c) catch {};
     }
-    
+
     const str = result.toOwnedSlice() catch "";
     L.pushString(str) catch {};
     L.allocator.free(str);
@@ -875,55 +875,55 @@ fn string_char(L: *LuaState) callconv(.C) i32 {
 pub fn openMath(L: *LuaState) void {
     L.pushNumber(std.math.pi);
     L.setGlobal("math.pi") catch return;
-    
+
     L.pushNumber(std.math.e);
     L.setGlobal("math.huge") catch return;
-    
+
     L.pushCFunction(math_abs) catch return;
     L.setGlobal("math.abs") catch return;
-    
+
     L.pushCFunction(math_floor) catch return;
     L.setGlobal("math.floor") catch return;
-    
+
     L.pushCFunction(math_ceil) catch return;
     L.setGlobal("math.ceil") catch return;
-    
+
     L.pushCFunction(math_sqrt) catch return;
     L.setGlobal("math.sqrt") catch return;
-    
+
     L.pushCFunction(math_pow) catch return;
     L.setGlobal("math.pow") catch return;
-    
+
     L.pushCFunction(math_min) catch return;
     L.setGlobal("math.min") catch return;
-    
+
     L.pushCFunction(math_max) catch return;
     L.setGlobal("math.max") catch return;
-    
+
     L.pushCFunction(math_sin) catch return;
     L.setGlobal("math.sin") catch return;
-    
+
     L.pushCFunction(math_cos) catch return;
     L.setGlobal("math.cos") catch return;
-    
+
     L.pushCFunction(math_tan) catch return;
     L.setGlobal("math.tan") catch return;
-    
+
     L.pushCFunction(math_log) catch return;
     L.setGlobal("math.log") catch return;
-    
+
     L.pushCFunction(math_exp) catch return;
     L.setGlobal("math.exp") catch return;
-    
+
     L.pushCFunction(math_random) catch return;
     L.setGlobal("math.random") catch return;
-    
+
     L.pushCFunction(math_randomseed) catch return;
     L.setGlobal("math.randomseed") catch return;
-    
+
     L.pushCFunction(math_modf) catch return;
     L.setGlobal("math.modf") catch return;
-    
+
     L.pushCFunction(math_fmod) catch return;
     L.setGlobal("math.fmod") catch return;
 }
@@ -965,14 +965,14 @@ fn math_min(L: *LuaState) callconv(.C) i32 {
         L.pushNumber(0);
         return 1;
     }
-    
+
     var min = L.toNumber(1) orelse 0;
     var i: i32 = 2;
     while (i <= n) : (i += 1) {
         const val = L.toNumber(i) orelse min;
         if (val < min) min = val;
     }
-    
+
     L.pushNumber(min);
     return 1;
 }
@@ -983,14 +983,14 @@ fn math_max(L: *LuaState) callconv(.C) i32 {
         L.pushNumber(0);
         return 1;
     }
-    
+
     var max = L.toNumber(1) orelse 0;
     var i: i32 = 2;
     while (i <= n) : (i += 1) {
         const val = L.toNumber(i) orelse max;
         if (val > max) max = val;
     }
-    
+
     L.pushNumber(max);
     return 1;
 }
@@ -1037,9 +1037,9 @@ fn math_random(L: *LuaState) callconv(.C) i32 {
     if (random_state == null) {
         random_state = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
     }
-    
+
     const n = L.getTop();
-    
+
     if (n == 0) {
         L.pushNumber(random_state.?.random().float(f64));
     } else if (n == 1) {
@@ -1050,7 +1050,7 @@ fn math_random(L: *LuaState) callconv(.C) i32 {
         const upper: i64 = @intFromFloat(L.toNumber(2) orelse lower);
         L.pushNumber(@floatFromInt(random_state.?.random().intRangeAtMost(i64, lower, upper)));
     }
-    
+
     return 1;
 }
 
