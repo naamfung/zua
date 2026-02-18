@@ -281,7 +281,7 @@ fn base_select(L: *LuaState) callconv(.c) i32 {
             }
             return count;
         }
-    } else if (idx > 0 and idx < n) {
+    } else if (idx > 0 and idx < @as(f64, @floatFromInt(n))) {
         var i: i32 = @intFromFloat(idx);
         while (i < n) : (i += 1) {
             L.pushValue(L.toValue(i + 1)) catch return 0;
