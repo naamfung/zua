@@ -73,7 +73,7 @@ pub const LuaState = struct {
         ptr.* = .{
             .allocator = allocator,
             .thread = thread,
-            .gc = GC.init(),
+            .gc = GC.init(allocator),
             .globals = globals,
             .registry = registry,
             .top = 0,
@@ -815,7 +815,6 @@ pub const LuaState = struct {
                     }
                 },
                 .forloop, .forprep => {
-                    // Simplified for loop handling
                     const asbx: Instruction.AsBx = @bitCast(instruction);
                     const a = asbx.a;
                     const offset = asbx.getSignedBx();
@@ -852,7 +851,6 @@ pub const LuaState = struct {
                     }
                 },
                 .tforloop => {
-                    // Table for loop - simplified
                     const abc: Instruction.ABC = @bitCast(instruction);
                     const a = abc.a;
                     const c = abc.c;
@@ -860,13 +858,33 @@ pub const LuaState = struct {
                     // R(A), R(A+1), R(A+2) = iterator state
                     // Call iterator: R(A+3), R(A+4), R(A+5) = R(A)(R(A+1), R(A+2))
                     const func = self.stack[base + a];
-                    _ = c;
                     
                     if (func == .nil) {
                         // End iteration
                         pc += 1;
+                    } else {
+                        // Get iterator function, state, and control variable
+                        const state = self.stack[base + a + 1];
+                        const control = self.stack[base + a + 2];
+                        
+                        // Push function, state, control
+                        try self.push(func);
+                        try self.push(state);
+                        try self.push(control);
+                        
+                        // Call iterator function
+                        try self.call(2, 3);
+                        
+                        // Get results
+                        const new_state = self.stack[base + a + 1];
+                        const new_control = self.stack[base + a + 2];
+                        const value = self.stack[base + a + 3];
+                        
+                        // If iterator returns nil, end iteration
+                        if (value == .nil) {
+                            pc += 1;
+                        }
                     }
-                    // Simplified - skip to next iteration
                 },
                 .closure => {
                     const abx: Instruction.ABx = @bitCast(instruction);
@@ -1031,11 +1049,15 @@ pub const LuaState = struct {
                     const b = abc.b;
                     
                     const num_wanted: ?usize = if (b == 0) null else b - 1;
-                    // TODO: Handle varargs
+                    
+                    // TODO: Implement proper vararg handling
+                    // For now, just fill with nil
                     if (num_wanted) |n| {
                         for (0..n) |i| {
                             self.stack[base + a + i] = .nil;
                         }
+                    } else {
+                        // Multiple returns - leave as is
                     }
                 },
             }
@@ -1085,33 +1107,7 @@ pub const CallInfo = struct {
 // GC
 // =============================================================================
 
-pub const GC = struct {
-    objects: ?*zua.object.GCObject = null,
-    num_objects: usize = 0,
-    threshold: usize = 1024,
-    
-    pub fn init() GC {
-        return .{};
-    }
-    
-    pub fn collect(self: *GC, allocator: Allocator) void {
-        // Mark phase would go here
-        // Sweep phase
-        var current = self.objects;
-        while (current) |obj| {
-            _ = allocator;
-            current = obj.next;
-        }
-        self.objects = null;
-        self.num_objects = 0;
-    }
-    
-    pub fn addObject(self: *GC, obj: *zua.object.GCObject) void {
-        obj.next = self.objects;
-        self.objects = obj;
-        self.num_objects += 1;
-    }
-};
+pub const GC = zua.gc.GC;
 
 // =============================================================================
 // Tests
