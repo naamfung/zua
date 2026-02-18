@@ -118,6 +118,9 @@ pub const LuaState = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        // Force garbage collection to collect all objects
+        self.gc.collect();
+        
         self.thread.deinit();
         self.globals.deinit();
         self.allocator.destroy(self.globals);
