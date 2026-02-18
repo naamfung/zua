@@ -61,9 +61,9 @@ pub const LuaState = struct {
     
     // String hash context for interning
     const StringHashContext = struct {
-        pub fn hash(self: @This(), hash: u64) u32 {
+        pub fn hash(self: @This(), key: u64) u32 {
             _ = self;
-            return @as(u32, @truncate(hash));
+            return @as(u32, @truncate(key));
         }
         
         pub fn eql(self: @This(), a: u64, b: u64) bool {
@@ -1151,7 +1151,7 @@ pub const LuaState = struct {
             .nil => .nil,
             .boolean => |b| .{ .boolean = b },
             .number => |n| .{ .number = n },
-            .string => |s| .{ .string = String.init(self.allocator, s) catch return .nil },
+            .string => |s| .{ .string = self.internString(s) catch return .nil },
         };
     }
 
