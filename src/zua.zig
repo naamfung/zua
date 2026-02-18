@@ -12,6 +12,7 @@ pub const ast = @import("ast.zig");
 pub const debug = @import("debug.zig");
 pub const vm = @import("vm.zig");
 pub const gc = @import("gc.zig");
+pub const state = @import("state.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

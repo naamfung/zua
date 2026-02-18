@@ -610,14 +610,14 @@ pub const Compiler = struct {
                 },
                 .single_char => switch (bin_op.char.?) {
                     '+', '-', '*', '/', '%', '^' => try self.codearith(Instruction.BinaryMath.tokenToOpCode(bin_op), e1, e2),
-                    '>' => @panic("TODO"),
-                    '<' => @panic("TODO"),
+                    '>' => try self.codecomp(Instruction.Compare.init(.lt, true, try self.exp2RK(e2), try self.exp2RK(e1)), e1),
+                    '<' => try self.codecomp(Instruction.Compare.init(.lt, false, try self.exp2RK(e1), try self.exp2RK(e2)), e1),
                     else => unreachable,
                 },
-                .eq => @panic("TODO"),
-                .ne => @panic("TODO"),
-                .le => @panic("TODO"),
-                .ge => @panic("TODO"),
+                .eq => try self.codecomp(Instruction.Compare.init(.eq, false, try self.exp2RK(e1), try self.exp2RK(e2)), e1),
+                .ne => try self.codecomp(Instruction.Compare.init(.eq, true, try self.exp2RK(e1), try self.exp2RK(e2)), e1),
+                .le => try self.codecomp(Instruction.Compare.init(.le, false, try self.exp2RK(e1), try self.exp2RK(e2)), e1),
+                .ge => try self.codecomp(Instruction.Compare.init(.le, true, try self.exp2RK(e2), try self.exp2RK(e1)), e1),
                 else => unreachable,
             }
         }
@@ -645,6 +645,11 @@ pub const Compiler = struct {
                 );
                 e1.desc = .{ .relocable = .{ .instruction_index = instruction_index } };
             }
+        }
+
+        pub fn codecomp(self: *Func, instruction: Instruction.Compare, e: *ExpDesc) !void {
+            const instruction_index = try self.emitInstruction(instruction);
+            e.desc = .{ .jmp = .{ .instruction_index = instruction_index } };
         }
 
         pub fn constfolding(self: *Func, op: OpCode, e1: *ExpDesc, e2: ?*ExpDesc) !bool {
