@@ -505,12 +505,13 @@ pub const LuaState = struct {
         const nresults = cclosure.func(@ptrCast(self));
         
         // Adjust stack
+        const args_to_remove = @as(usize, @intCast(@max(0, num_args + 1)));
         if (nresults == 0) {
-            self.top = old_top - @as(usize, @intCast(num_args + 1));
+            self.top = if (old_top > args_to_remove) old_top - args_to_remove else 0;
         } else {
             // Keep nresults values on stack
-            const new_top = old_top - @as(usize, @intCast(num_args + 1)) + @as(usize, @intCast(nresults));
-            self.top = new_top;
+            const new_top = if (old_top > args_to_remove) old_top - args_to_remove else 0;
+            self.top = new_top + @as(usize, @intCast(@max(0, nresults)));
         }
     }
 
