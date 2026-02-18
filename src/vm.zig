@@ -399,7 +399,7 @@ pub const LuaState = struct {
     // Load a chunk from source
     pub fn load(self: *Self, source: []const u8, name: []const u8) !void {
         const func = try zua.compiler.compile(self.allocator, source);
-        const closure = try Closure.init(self.allocator, func);
+        const closure = try Closure.initWithGC(self.allocator, &self.gc, func);
         try self.push(.{ .closure = closure });
         
         // Set the name in constants if provided
@@ -591,8 +591,7 @@ pub const LuaState = struct {
                 .newtable => {
                     const abc: Instruction.ABC = @bitCast(instruction);
                     const a = abc.a;
-                    const table = try self.allocator.create(Table);
-                    table.* = Table.init(self.allocator);
+                    const table = try Table.initWithGC(self.allocator, &self.gc);
                     self.stack[base + a] = .{ .table = table };
                 },
                 .self => {
