@@ -924,7 +924,7 @@ pub const LuaState = struct {
                     // Create closure from prototype at index bx
                     if (bx < proto.protos.len) {
                         const child_proto = proto.protos[bx];
-                        const closure = try Closure.init(self.allocator, child_proto);
+                        const closure = try Closure.initWithGC(self.allocator, &self.gc, child_proto);
                         self.stack[base + a] = .{ .closure = closure };
                     } else {
                         self.stack[base + a] = .nil;
