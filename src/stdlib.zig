@@ -1023,16 +1023,16 @@ fn math_log(L: *LuaState) callconv(.c) i32 {
     const n = L.toNumber(1) orelse 0;
     if (L.getTop() >= 2) {
         const base = L.toNumber(2) orelse std.math.e;
-        L.pushNumber(std.math.log(n) / std.math.log(base));
+        L.pushNumber(std.math.log(f64, base, n)) catch return 0;
     } else {
-        L.pushNumber(std.math.log(n));
+        L.pushNumber(std.math.log(f64, std.math.e, n)) catch return 0;
     }
     return 1;
 }
 
 fn math_exp(L: *LuaState) callconv(.c) i32 {
     const n = L.toNumber(1) orelse 0;
-    L.pushNumber(std.math.exp(n));
+    L.pushNumber(std.math.exp(n)) catch return 0;
     return 1;
 }
 
@@ -1047,14 +1047,14 @@ fn math_random(L: *LuaState) callconv(.c) i32 {
     const n = L.getTop();
 
     if (n == 0) {
-        L.pushNumber(random_state.?.random().float(f64));
+        L.pushNumber(random_state.?.random().float(f64)) catch return 0;
     } else if (n == 1) {
         const upper: i64 = @intFromFloat(L.toNumber(1) orelse 1);
-        L.pushNumber(@floatFromInt(random_state.?.random().intRangeAtMost(i64, 1, upper)));
+        L.pushNumber(@floatFromInt(random_state.?.random().intRangeAtMost(i64, 1, upper))) catch return 0;
     } else {
         const lower: i64 = @intFromFloat(L.toNumber(1) orelse 1);
         const upper: i64 = @intFromFloat(L.toNumber(2) orelse lower);
-        L.pushNumber(@floatFromInt(random_state.?.random().intRangeAtMost(i64, lower, upper)));
+        L.pushNumber(@floatFromInt(random_state.?.random().intRangeAtMost(i64, lower, upper))) catch return 0;
     }
 
     return 1;
