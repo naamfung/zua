@@ -94,9 +94,12 @@ test "LuaState init" {
     var state = try LuaState.init(allocator);
     defer state.deinit();
     
-    try std.testing.expect(state.main_thread != null);
-    try std.testing.expect(state.globals != null);
-    try std.testing.expect(state.registry != null);
+    // These fields are non-nullable pointers, so no need to check against null
+    _ = state.main_thread;
+    _ = state.globals;
+    _ = state.registry;
+    // Just verify the state was initialized successfully
+    try std.testing.expect(true);
 }
 
 test "LuaState globals" {
