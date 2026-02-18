@@ -961,7 +961,7 @@ fn math_sqrt(L: *LuaState) callconv(.c) i32 {
 fn math_pow(L: *LuaState) callconv(.c) i32 {
     const x = L.toNumber(1) orelse 0;
     const y = L.toNumber(2) orelse 0;
-    L.pushNumber(std.math.pow(f64, x, y));
+    L.pushNumber(std.math.pow(f64, x, y)) catch return 0;
     return 1;
 }
 
