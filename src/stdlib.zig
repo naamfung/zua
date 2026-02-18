@@ -86,18 +86,23 @@ pub fn openBase(L: *LuaState) void {
 
 fn base_print(L: *LuaState) callconv(.c) i32 {
     const n = L.getTop();
+    var stdout_buf: [4096]u8 = undefined;
     const stdout_file = std.fs.File.stdout();
-    var stdout = stdout_file.writer();
+    var stdout = stdout_file.writer(&stdout_buf);
 
     var i: i32 = 1;
     while (i <= n) : (i += 1) {
         if (i > 1) {
-            stdout.writeAll("\t") catch {};
+            stdout.interface.print("\t", .{}) catch {};
         }
         const val = L.toValue(i);
-        printValue(stdout, val) catch {};
+        printValue(&stdout.interface, val) catch {};
     }
-    stdout.writeAll("\n") catch {};
+    stdout.interface.print("\n", .{}) catch {};
+
+    // Flush the buffer to stdout
+    _ = stdout_file.write(stdout_buf[0..stdout.pos]) catch _;
+
     return 0;
 }
 
