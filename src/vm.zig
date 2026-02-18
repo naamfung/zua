@@ -1073,22 +1073,29 @@ pub const LuaState = struct {
                     } else {
                         // Return exactly num_wanted values
                         const wanted: usize = @intCast(num_wanted);
+                        const return_base = if (base > 0) base - 1 else 0;
                         if (num_results) |n| {
                             // Copy results
                             for (0..@min(wanted, n)) |i| {
-                                self.stack[base - 1 + i] = self.stack[base + a + i];
+                                if (return_base + i < self.stack.len) {
+                                    self.stack[return_base + i] = self.stack[base + a + i];
+                                }
                             }
                             // Fill remaining with nil
                             for (n..wanted) |i| {
-                                self.stack[base - 1 + i] = .nil;
+                                if (return_base + i < self.stack.len) {
+                                    self.stack[return_base + i] = .nil;
+                                }
                             }
                         } else {
                             // Multiple returns
                             for (0..wanted) |i| {
-                                self.stack[base - 1 + i] = .nil;
+                                if (return_base + i < self.stack.len) {
+                                    self.stack[return_base + i] = .nil;
+                                }
                             }
                         }
-                        self.top = base - 1 + wanted;
+                        self.top = return_base + wanted;
                     }
                     
                     return;
