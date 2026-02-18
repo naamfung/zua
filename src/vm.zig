@@ -123,6 +123,13 @@ pub const LuaState = struct {
         self.allocator.destroy(self.globals);
         self.registry.deinit();
         self.allocator.destroy(self.registry);
+        // Clear string pool
+        var it = self.string_pool.iterator();
+        while (it.next()) |entry| {
+            const str = entry.value_ptr.*;
+            str.deinit(self.allocator);
+        }
+        self.string_pool.deinit();
         self.allocator.free(self.stack);
         self.base_ci.deinit(self.allocator);
         self.allocator.destroy(self);
