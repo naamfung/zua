@@ -101,8 +101,8 @@ pub const GC = struct {
                 self.markObject(&closure.proto.gc);
                 // Mark upvalues
                 for (closure.upvalues) |upval| {
-                    if (upval) |uv| {
-                        self.markObject(&uv.gc);
+                    if (upval != undefined) {
+                        self.markObject(&upval.gc);
                     }
                 }
             },
