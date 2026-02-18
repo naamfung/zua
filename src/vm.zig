@@ -123,12 +123,7 @@ pub const LuaState = struct {
         self.allocator.destroy(self.globals);
         self.registry.deinit();
         self.allocator.destroy(self.registry);
-        // Clear string pool
-        var it = self.string_pool.iterator();
-        while (it.next()) |entry| {
-            const str = entry.value_ptr.*;
-            str.deinit(self.allocator);
-        }
+        // Clear string pool (strings will be collected by GC)
         self.string_pool.deinit();
         self.allocator.free(self.stack);
         self.base_ci.deinit(self.allocator);
@@ -256,6 +251,41 @@ pub const LuaState = struct {
     pub fn pushCFunction(self: *Self, f: CFunction) !void {
         const cclosure = try CClosure.initWithGC(self.allocator, &self.gc, f, 0);
         try self.push(.{ .c_closure = cclosure });
+    }
+
+    pub fn createUpValue(self: *Self, value: *Value) !*UpValue {
+        // Create a new upvalue
+        const upval_ptr = try self.allocator.create(UpValue);
+        upval_ptr.* = UpValue.init(value);
+        
+        // Add to garbage collector
+        self.gc.addObject(&upval_ptr.gc);
+        
+        // Add to open upvalues list
+        upval_ptr.next = self.open_upval;
+        self.open_upval = upval_ptr;
+        
+        return upval_ptr;
+    }
+
+    pub fn closeUpValues(self: *Self, level: usize) void {
+        // Close upvalues that point to stack positions below level
+        var current = &self.open_upval;
+        while (current.*) |upval| {
+            if (@intFromPtr(upval.value) - @intFromPtr(&self.stack[0]) >= level) {
+                // This upvalue points above the level, stop
+                break;
+            }
+            
+            // Close the upvalue
+            upval.close();
+            
+            // Remove from open upvalues list
+            current.* = upval.next;
+            
+            // Move to next upvalue
+            current = &upval.next;
+        }
     }
 
     pub fn setGlobal(self: *Self, name: []const u8) !void {

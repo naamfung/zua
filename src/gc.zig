@@ -23,6 +23,11 @@ pub const GC = struct {
     threshold: usize = 1024,
     allocator: Allocator,
 
+    // Memory usage tracking
+    total_allocated: usize = 0,
+    total_collected: usize = 0,
+    collection_count: usize = 0,
+
     // Root objects for garbage collection
     roots: ?Roots = null,
 
@@ -47,16 +52,45 @@ pub const GC = struct {
         self.markRoots();
 
         // Sweep phase
-        self.sweep();
+        const collected = self.sweep();
 
-        // Reset threshold
-        self.threshold = self.num_objects * 2;
+        // Update statistics
+        self.collection_count += 1;
+        self.total_collected += collected;
+
+        // Dynamic threshold adjustment
+        // Use a factor between 1.5 and 3.0 based on collection efficiency
+        const efficiency = if (self.num_objects > 0)
+            @as(f64, @floatFromInt(collected)) / @as(f64, @floatFromInt(self.num_objects + collected))
+        else
+            0.0;
+        const factor = 1.5 + (efficiency * 1.5); // Range: 1.5-3.0
+        self.threshold = @as(usize, @intFromFloat(@as(f64, @floatFromInt(self.num_objects)) * factor));
+
+        // Ensure minimum threshold
+        if (self.threshold < 1024) {
+            self.threshold = 1024;
+        }
     }
 
     pub fn addObject(self: *GC, obj: *GCObject) void {
         obj.next = self.objects;
         self.objects = obj;
         self.num_objects += 1;
+
+        // Track memory usage (approximate size)
+        var obj_size: usize = 0;
+        switch (obj.obj_type) {
+            .string => obj_size = @sizeOf(object.String),
+            .table => obj_size = @sizeOf(object.Table),
+            .closure => obj_size = @sizeOf(object.Closure),
+            .c_closure => obj_size = @sizeOf(object.CClosure),
+            .userdata => obj_size = @sizeOf(object.UserData),
+            .thread => obj_size = @sizeOf(object.Thread),
+            .upvalue => obj_size = @sizeOf(object.UpValue),
+            .proto => obj_size = @sizeOf(object.Function),
+        }
+        self.total_allocated += obj_size;
 
         // Trigger collection if threshold exceeded
         if (self.num_objects > self.threshold) {
@@ -213,9 +247,10 @@ pub const GC = struct {
         }
     }
 
-    fn sweep(self: *GC) void {
+    fn sweep(self: *GC) usize {
         var prev: ?*GCObject = null;
         var current = self.objects;
+        var collected: usize = 0;
 
         while (current) |obj| {
             const next = obj.next;
@@ -230,6 +265,7 @@ pub const GC = struct {
 
                 self.freeObject(obj);
                 self.num_objects -= 1;
+                collected += 1;
             } else {
                 // Marked object, unmark it for next collection
                 obj.marked = 0;
@@ -238,9 +274,24 @@ pub const GC = struct {
 
             current = next;
         }
+        return collected;
     }
 
     fn freeObject(self: *GC, obj: *GCObject) void {
+        // Track memory freed (approximate size)
+        var obj_size: usize = 0;
+        switch (obj.obj_type) {
+            .string => obj_size = @sizeOf(object.String),
+            .table => obj_size = @sizeOf(object.Table),
+            .closure => obj_size = @sizeOf(object.Closure),
+            .c_closure => obj_size = @sizeOf(object.CClosure),
+            .userdata => obj_size = @sizeOf(object.UserData),
+            .thread => obj_size = @sizeOf(object.Thread),
+            .upvalue => obj_size = @sizeOf(object.UpValue),
+            .proto => obj_size = @sizeOf(object.Function),
+        }
+        self.total_collected += obj_size;
+
         switch (obj.obj_type) {
             .string => {
                 const str = String.cast(obj);
@@ -262,6 +313,7 @@ pub const GC = struct {
             .userdata => {
                 const userdata = UserData.cast(obj);
                 // TODO: Call finalizer if present
+                // For now, skip finalizer call to avoid pointer issues
                 self.allocator.destroy(userdata);
             },
             .thread => {
@@ -278,6 +330,45 @@ pub const GC = struct {
                 self.allocator.destroy(proto);
             },
         }
+    }
+
+    // GC Statistics and Debugging
+    pub const GCStats = struct {
+        num_objects: usize,
+        threshold: usize,
+        total_allocated: usize,
+        total_collected: usize,
+        collection_count: usize,
+    };
+
+    pub fn getStats(self: *GC) GCStats {
+        return .{
+            .num_objects = self.num_objects,
+            .threshold = self.threshold,
+            .total_allocated = self.total_allocated,
+            .total_collected = self.total_collected,
+            .collection_count = self.collection_count,
+        };
+    }
+
+    pub fn printStats(self: *GC) void {
+        const stats = self.getStats();
+        std.debug.print("GC Stats:\n", .{});
+        std.debug.print("  Objects: {d}\n", .{stats.num_objects});
+        std.debug.print("  Threshold: {d}\n", .{stats.threshold});
+        std.debug.print("  Total Allocated: {d} bytes\n", .{stats.total_allocated});
+        std.debug.print("  Total Collected: {d} bytes\n", .{stats.total_collected});
+        std.debug.print("  Collections: {d}\n", .{stats.collection_count});
+        std.debug.print("\n", .{});
+    }
+
+    pub fn debugCollect(self: *GC) void {
+        std.debug.print("Starting GC collection...\n", .{});
+        const before = self.num_objects;
+        self.collect();
+        const after = self.num_objects;
+        std.debug.print("GC collection completed. Collected {d} objects.\n", .{before - after});
+        self.printStats();
     }
 };
 
