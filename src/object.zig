@@ -249,7 +249,6 @@ pub const Table = struct {
                 .table => |v| v.deinit(),
                 .closure => |v| v.deinit(self.allocator),
                 .c_closure => |v| v.deinit(self.allocator),
-                .userdata => |v| v.deinit(self.allocator),
                 .thread => |v| v.deinit(),
                 else => {},
             }
@@ -270,7 +269,6 @@ pub const Table = struct {
                 .table => |v| v.deinit(),
                 .closure => |v| v.deinit(self.allocator),
                 .c_closure => |v| v.deinit(self.allocator),
-                .userdata => |v| v.deinit(self.allocator),
                 .thread => |v| v.deinit(),
                 else => {},
             }
