@@ -526,7 +526,7 @@ fn table_remove(L: *LuaState) callconv(.c) i32 {
 
 fn table_concat(L: *LuaState) callconv(.c) i32 {
     const t = L.toTable(1) orelse {
-        L.pushString("");
+        L.pushString("") catch return 0;
         return 1;
     };
 
