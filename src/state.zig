@@ -44,7 +44,7 @@ pub const LuaState = struct {
         self.allocator.destroy(self);
     }
     
-    fn initGlobals(self: *LuaState) !void {
+    fn initGlobals(_: *LuaState) !void {
         // TODO: Initialize global environment with standard libraries
     }
     

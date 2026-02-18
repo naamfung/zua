@@ -81,11 +81,11 @@ pub fn runFile(allocator: std.mem.Allocator, filename: []const u8) !void {
 }
 
 pub fn executeString(allocator: std.mem.Allocator, source: []const u8) !void {
-    var state = try vm.LuaState.init(allocator);
-    defer state.deinit();
+    var lua_state = try vm.LuaState.init(allocator);
+    defer lua_state.deinit();
 
-    try state.load(source, "[string]");
-    try state.run();
+    try lua_state.load(source, "[string]");
+    try lua_state.run();
 }
 
 test "zua" {
