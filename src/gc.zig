@@ -136,11 +136,11 @@ pub const GC = struct {
                 // Mark prototype
                 self.markObject(&closure.proto.gc);
                 // Mark upvalues
-                // TODO: Fix this - upvalues are initialized to undefined, which causes illegal behavior
-                // for (closure.upvalues) |upval| {
-                //     self.markObject(&upval.gc);
-                // }
-                // For now, we'll skip marking upvalues to avoid compilation errors
+                for (closure.upvalues) |upval| {
+                    if (upval) |uv| {
+                        self.markObject(&uv.gc);
+                    }
+                }
             },
             .c_closure => {
                 const cclosure = CClosure.cast(obj);

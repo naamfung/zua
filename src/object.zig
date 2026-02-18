@@ -528,12 +528,15 @@ pub const Function = struct {
 pub const Closure = struct {
     gc: GCObject,
     proto: *Function,
-    upvalues: []*UpValue,
+    upvalues: []?*UpValue,
 
     pub fn init(allocator: Allocator, proto: *Function) !*Closure {
         const ptr = try allocator.create(Closure);
-        const upvalues = try allocator.alloc(*UpValue, proto.num_upvalues);
-        @memset(upvalues, undefined);
+        const upvalues = try allocator.alloc(?*UpValue, proto.num_upvalues);
+        // Initialize upvalues to null
+        for (upvalues) |*upval| {
+            upval.* = null;
+        }
 
         ptr.* = .{
             .gc = .{ .obj_type = .closure },
