@@ -642,7 +642,7 @@ fn table_maxn(L: *LuaState) callconv(.c) i32 {
         }
     }
 
-    L.pushNumber(max);
+    L.pushNumber(max) catch return 0;
     return 1;
 }
 
