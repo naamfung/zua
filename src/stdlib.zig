@@ -1070,15 +1070,15 @@ fn math_modf(L: *LuaState) callconv(.c) i32 {
     const n = L.toNumber(1) orelse 0;
     const int_part = @trunc(n);
     const frac_part = n - int_part;
-    L.pushNumber(int_part);
-    L.pushNumber(frac_part);
+    L.pushNumber(int_part) catch return 0;
+    L.pushNumber(frac_part) catch return 0;
     return 2;
 }
 
 fn math_fmod(L: *LuaState) callconv(.c) i32 {
     const x = L.toNumber(1) orelse 0;
     const y = L.toNumber(2) orelse 1;
-    L.pushNumber(@mod(x, y));
+    L.pushNumber(@mod(x, y)) catch return 0;
     return 1;
 }
 
