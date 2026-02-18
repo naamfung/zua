@@ -546,6 +546,8 @@ pub const Closure = struct {
     pub fn initWithGC(allocator: Allocator, gc: *zua.gc.GC, proto: *Function) !*Closure {
         const ptr = try Closure.init(allocator, proto);
         gc.addObject(&ptr.gc);
+        // Add prototype to GC if not already added
+        gc.addObject(&proto.gc);
         return ptr;
     }
 
