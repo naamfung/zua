@@ -116,7 +116,7 @@ pub const Value = union(enum) {
             .nil => true,
             .boolean => |v| v == b.boolean,
             .number => |v| v == b.number,
-            .string => |v| v == b.string,
+            .string => |v| v.eql(b.string),
             .table => |v| v == b.table,
             .closure => |v| v == b.closure,
             .c_closure => |v| v == b.c_closure,
@@ -242,7 +242,39 @@ pub const Table = struct {
     }
 
     pub fn deinit(self: *Table) void {
+        // 释放数组中的对象
+        for (self.array.items) |value| {
+            switch (value) {
+                .string => |v| v.deinit(self.allocator),
+                .table => |v| v.deinit(),
+                .closure => |v| v.deinit(self.allocator),
+                .c_closure => |v| v.deinit(self.allocator),
+                .userdata => |v| v.deinit(self.allocator),
+                .thread => |v| v.deinit(),
+                else => {},
+            }
+        }
         self.array.deinit(self.allocator);
+
+        // 释放map中的对象
+        var iterator = self.map.iterator();
+        while (iterator.next()) |entry| {
+            // 释放键
+            switch (entry.key) {
+                .string => |v| v.deinit(self.allocator),
+                else => {},
+            }
+            // 释放值
+            switch (entry.value) {
+                .string => |v| v.deinit(self.allocator),
+                .table => |v| v.deinit(),
+                .closure => |v| v.deinit(self.allocator),
+                .c_closure => |v| v.deinit(self.allocator),
+                .userdata => |v| v.deinit(self.allocator),
+                .thread => |v| v.deinit(),
+                else => {},
+            }
+        }
         self.map.deinit();
     }
 
