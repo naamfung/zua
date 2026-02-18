@@ -936,13 +936,13 @@ pub fn openMath(L: *LuaState) void {
 
 fn math_abs(L: *LuaState) callconv(.c) i32 {
     const n = L.toNumber(1) orelse 0;
-    L.pushNumber(@abs(n));
+    L.pushNumber(@abs(n)) catch return 0;
     return 1;
 }
 
 fn math_floor(L: *LuaState) callconv(.c) i32 {
     const n = L.toNumber(1) orelse 0;
-    L.pushNumber(@floor(n));
+    L.pushNumber(@floor(n)) catch return 0;
     return 1;
 }
 
