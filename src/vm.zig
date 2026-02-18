@@ -63,18 +63,22 @@ pub const LuaState = struct {
         const stack = try allocator.alloc(Value, 1024);
         @memset(stack, .nil);
         
-        const globals = try allocator.create(Table);
-        globals.* = Table.init(allocator);
+        const globals = try Table.initWithGC(allocator, &ptr.gc);
         
-        const registry = try allocator.create(Table);
-        registry.* = Table.init(allocator);
+        const registry = try Table.initWithGC(allocator, &ptr.gc);
         
         const thread = try Thread.init(allocator, 1024);
+        
+        ptr.gc = GC.init(allocator);
+        
+        const globals = try Table.initWithGC(allocator, &ptr.gc);
+        
+        const registry = try Table.initWithGC(allocator, &ptr.gc);
         
         ptr.* = .{
             .allocator = allocator,
             .thread = thread,
-            .gc = GC.init(allocator),
+            .gc = ptr.gc,
             .globals = globals,
             .registry = registry,
             .top = 0,
@@ -1184,4 +1188,5 @@ test "LuaState table operations" {
     
     try state.pushNumber(1);
     try state.getTable(-2);
-    try std.testing.expectEqual(@as(f64, 100.0), state.toNum
+    try std.testing.expectEqual(@as(f64, 100.0), state.toNumber(-1).?);
+}
