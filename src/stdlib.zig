@@ -783,7 +783,8 @@ fn string_format(L: *LuaState) callconv(.c) i32 {
     const fmt = L.toString(1) orelse "";
 
     // Very simplified format implementation
-    var result = std.ArrayList(u8).init(L.allocator);
+    var result = std.ArrayList(u8){};
+    result.* = std.ArrayList(u8).init(L.allocator);
     var arg_idx: i32 = 2;
     var i: usize = 0;
 
