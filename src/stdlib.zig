@@ -701,7 +701,7 @@ fn string_sub(L: *LuaState) callconv(.c) i32 {
     if (end > len) end = len;
 
     if (start > end) {
-        L.pushString("");
+        L.pushString("") catch return 0;
         return 1;
     }
 
