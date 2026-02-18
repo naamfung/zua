@@ -101,7 +101,7 @@ fn base_print(L: *LuaState) callconv(.c) i32 {
     stdout.interface.print("\n", .{}) catch {};
 
     // Flush the buffer to stdout
-    _ = stdout_file.write(stdout_buf[0..stdout.pos]) catch _;
+    _ = stdout_file.write(stdout_buf[0..stdout.pos]) catch {};
 
     return 0;
 }
