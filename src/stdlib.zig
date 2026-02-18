@@ -300,11 +300,11 @@ fn base_getmetatable(L: *LuaState) callconv(.c) i32 {
             if (t.metatable) |mt| {
                 L.pushValue(.{ .table = mt }) catch return 0;
             } else {
-                L.pushNil();
+                L.pushNil() catch return 0;
             }
         },
         else => {
-            L.pushNil();
+            L.pushNil() catch return 0;
         },
     }
     return 1;
@@ -327,7 +327,7 @@ fn base_setmetatable(L: *LuaState) callconv(.c) i32 {
 
 fn base_rawget(L: *LuaState) callconv(.c) i32 {
     const t = L.toTable(1) orelse {
-        L.pushNil();
+        L.pushNil() catch return 0;
         return 1;
     };
     const k = L.toValue(2);
@@ -345,7 +345,7 @@ fn base_rawset(L: *LuaState) callconv(.c) i32 {
 }
 
 fn base_rawequal(L: *LuaState) callconv(.c) i32 {
-    L.pushBoolean(L.rawEqual(1, 2));
+    L.pushBoolean(L.rawEqual(1, 2)) catch return 0;
     return 1;
 }
 
