@@ -681,7 +681,7 @@ pub fn openString(L: *LuaState) void {
 
 fn string_len(L: *LuaState) callconv(.c) i32 {
     const s = L.toString(1) orelse "";
-    L.pushNumber(@floatFromInt(s.len));
+    L.pushNumber(@floatFromInt(s.len)) catch return 0;
     return 1;
 }
 
