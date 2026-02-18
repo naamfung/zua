@@ -241,6 +241,13 @@ pub const Table = struct {
         };
     }
 
+    pub fn initWithGC(allocator: Allocator, gc: *zua.gc.GC) !*Table {
+        const ptr = try allocator.create(Table);
+        ptr.* = Table.init(allocator);
+        gc.addObject(&ptr.gc);
+        return ptr;
+    }
+
     pub fn deinit(self: *Table) void {
         self.array.deinit(self.allocator);
         self.map.deinit();
@@ -555,6 +562,12 @@ pub const CClosure = struct {
             .func = func,
             .upvalues = upvalues,
         };
+        return ptr;
+    }
+
+    pub fn initWithGC(allocator: Allocator, gc: *zua.gc.GC, func: CFunction, num_upvalues: usize) !*CClosure {
+        const ptr = try CClosure.init(allocator, func, num_upvalues);
+        gc.addObject(&ptr.gc);
         return ptr;
     }
 

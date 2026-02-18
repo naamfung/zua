@@ -194,19 +194,18 @@ pub const LuaState = struct {
     }
 
     pub fn pushString(self: *Self, s: []const u8) !void {
-        const str = try String.init(self.allocator, s);
+        const str = try String.initWithGC(self.allocator, &self.gc, s);
         try self.push(.{ .string = str });
     }
 
     pub fn pushTable(self: *Self) !*Table {
-        const table = try self.allocator.create(Table);
-        table.* = Table.init(self.allocator);
+        const table = try Table.initWithGC(self.allocator, &self.gc);
         try self.push(.{ .table = table });
         return table;
     }
 
     pub fn pushCFunction(self: *Self, f: CFunction) !void {
-        const cclosure = try CClosure.init(self.allocator, f, 0);
+        const cclosure = try CClosure.initWithGC(self.allocator, &self.gc, f, 0);
         try self.push(.{ .c_closure = cclosure });
     }
 
@@ -1185,5 +1184,4 @@ test "LuaState table operations" {
     
     try state.pushNumber(1);
     try state.getTable(-2);
-    try std.testing.expectEqual(@as(f64, 100.0), state.toNumber(-1).?);
-}
+    try std.testing.expectEqual(@as(f64, 100.0), state.toNum
