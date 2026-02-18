@@ -1009,13 +1009,13 @@ fn math_sin(L: *LuaState) callconv(.c) i32 {
 
 fn math_cos(L: *LuaState) callconv(.c) i32 {
     const n = L.toNumber(1) orelse 0;
-    L.pushNumber(std.math.cos(n));
+    L.pushNumber(std.math.cos(n)) catch return 0;
     return 1;
 }
 
 fn math_tan(L: *LuaState) callconv(.c) i32 {
     const n = L.toNumber(1) orelse 0;
-    L.pushNumber(std.math.tan(n));
+    L.pushNumber(std.math.tan(n)) catch return 0;
     return 1;
 }
 
