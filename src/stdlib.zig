@@ -954,7 +954,7 @@ fn math_ceil(L: *LuaState) callconv(.c) i32 {
 
 fn math_sqrt(L: *LuaState) callconv(.c) i32 {
     const n = L.toNumber(1) orelse 0;
-    L.pushNumber(std.math.sqrt(n));
+    L.pushNumber(std.math.sqrt(n)) catch return 0;
     return 1;
 }
 
