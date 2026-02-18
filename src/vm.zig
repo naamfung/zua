@@ -369,7 +369,7 @@ pub const LuaState = struct {
 
     pub fn concat(self: *Self, n: i32) !void {
         if (n == 0) {
-            try self.push(.{ .string = try String.init(self.allocator, "") });
+            try self.push(.{ .string = try self.internString("") });
             return;
         }
         
@@ -392,7 +392,7 @@ pub const LuaState = struct {
         }
         
         const items = try result.toOwnedSlice(self.allocator);
-        const str = try String.init(self.allocator, items);
+        const str = try self.internString(items);
         self.allocator.free(items);
         
         self.top = start;
