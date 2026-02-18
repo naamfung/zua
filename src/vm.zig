@@ -13,6 +13,7 @@ const Constant = zua.object.Constant;
 const UpValue = zua.object.UpValue;
 const Thread = zua.object.Thread;
 const CFunction = zua.object.CFunction;
+const stdlib = @import("stdlib.zig");
 
 // Error set for VM operations
 pub const VmError = error{
@@ -84,6 +85,10 @@ pub const LuaState = struct {
         };
         
         try ptr.base_ci.append(ptr.allocator, .{});
+        
+        // Open standard libraries
+        stdlib.openLibs(ptr);
+        
         return ptr;
     }
 
