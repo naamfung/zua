@@ -50,7 +50,7 @@ pub const GC = struct {
         }
     }
 
-    fn markRoots(self: *GC) void {
+    fn markRoots(_: *GC) void {
         // Mark all root objects
         // TODO: Mark from main thread stack, globals, registry, etc.
         // This is a placeholder - in a real implementation, we would need to:
