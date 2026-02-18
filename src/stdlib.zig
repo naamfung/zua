@@ -968,7 +968,7 @@ fn math_pow(L: *LuaState) callconv(.c) i32 {
 fn math_min(L: *LuaState) callconv(.c) i32 {
     const n = L.getTop();
     if (n == 0) {
-        L.pushNumber(0);
+        L.pushNumber(0) catch return 0;
         return 1;
     }
 
