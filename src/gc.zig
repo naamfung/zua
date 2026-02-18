@@ -1,16 +1,17 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const zua = @import("zua.zig");
-const GCObject = zua.object.GCObject;
-const String = zua.object.String;
-const Table = zua.object.Table;
-const Closure = zua.object.Closure;
-const CClosure = zua.object.CClosure;
-const UserData = zua.object.UserData;
-const Thread = zua.object.Thread;
-const UpValue = zua.object.UpValue;
-const Function = zua.object.Function;
-const Value = zua.object.Value;
+const object = zua.object;
+const GCObject = object.GCObject;
+const String = object.String;
+const Table = object.Table;
+const Closure = object.Closure;
+const CClosure = object.CClosure;
+const UserData = object.UserData;
+const Thread = object.Thread;
+const UpValue = object.UpValue;
+const Function = object.Function;
+const Value = object.Value;
 
 // =============================================================================
 // GC State
