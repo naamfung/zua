@@ -194,6 +194,12 @@ pub const String = struct {
         return ptr;
     }
 
+    pub fn initWithGC(allocator: Allocator, gc: *zua.gc.GC, str: []const u8) !*String {
+        const ptr = try String.init(allocator, str);
+        gc.addObject(&ptr.gc);
+        return ptr;
+    }
+
     pub fn deinit(self: *String, allocator: Allocator) void {
         const slice = self.data[0..self.len];
         allocator.free(slice);
@@ -508,6 +514,12 @@ pub const Closure = struct {
             .proto = proto,
             .upvalues = upvalues,
         };
+        return ptr;
+    }
+
+    pub fn initWithGC(allocator: Allocator, gc: *zua.gc.GC, proto: *Function) !*Closure {
+        const ptr = try Closure.init(allocator, proto);
+        gc.addObject(&ptr.gc);
         return ptr;
     }
 
