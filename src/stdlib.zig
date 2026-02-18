@@ -948,7 +948,7 @@ fn math_floor(L: *LuaState) callconv(.c) i32 {
 
 fn math_ceil(L: *LuaState) callconv(.c) i32 {
     const n = L.toNumber(1) orelse 0;
-    L.pushNumber(@ceil(n));
+    L.pushNumber(@ceil(n)) catch return 0;
     return 1;
 }
 
