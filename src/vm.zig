@@ -853,7 +853,7 @@ pub const LuaState = struct {
                 .tforloop => {
                     const abc: Instruction.ABC = @bitCast(instruction);
                     const a = abc.a;
-                    const c = abc.c;
+                    _ = abc.c;
                     
                     // R(A), R(A+1), R(A+2) = iterator state
                     // Call iterator: R(A+3), R(A+4), R(A+5) = R(A)(R(A+1), R(A+2))
@@ -876,8 +876,8 @@ pub const LuaState = struct {
                         try self.call(2, 3);
                         
                         // Get results
-                        const new_state = self.stack[base + a + 1];
-                        const new_control = self.stack[base + a + 2];
+                        _ = self.stack[base + a + 1];
+                        _ = self.stack[base + a + 2];
                         const value = self.stack[base + a + 3];
                         
                         // If iterator returns nil, end iteration

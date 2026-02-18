@@ -31,10 +31,10 @@ pub const GC = struct {
     pub fn collect(self: *GC) void {
         // Mark phase
         self.markRoots();
-        
+
         // Sweep phase
         self.sweep();
-        
+
         // Reset threshold
         self.threshold = self.num_objects * 2;
     }
@@ -43,26 +43,26 @@ pub const GC = struct {
         obj.next = self.objects;
         self.objects = obj;
         self.num_objects += 1;
-        
+
         // Trigger collection if threshold exceeded
         if (self.num_objects > self.threshold) {
             self.collect();
         }
     }
 
-    fn markRoots(self: *GC) void {
+    fn markRoots(_: *GC) void {
         // Mark all root objects
         // TODO: Mark from main thread stack, globals, etc.
     }
 
     fn markObject(self: *GC, obj: *GCObject) void {
         if (obj.marked != 0) return;
-        
+
         obj.marked = 1;
-        
+
         switch (obj.obj_type) {
             .string => {
-                const str = String.cast(obj);
+                _ = String.cast(obj);
                 // Strings don't have references to other objects
             },
             .table => {
@@ -138,7 +138,7 @@ pub const GC = struct {
                 // Mark constants
                 for (proto.constants) |constant| {
                     switch (constant) {
-                        .string => |s| {
+                        .string => {
                             // TODO: If string is interned, find and mark it
                         },
                         else => {},
@@ -167,10 +167,10 @@ pub const GC = struct {
     fn sweep(self: *GC) void {
         var prev: ?*GCObject = null;
         var current = self.objects;
-        
+
         while (current) |obj| {
             const next = obj.next;
-            
+
             if (obj.marked == 0) {
                 // Unmarked object, collect it
                 if (prev) |p| {
@@ -178,7 +178,7 @@ pub const GC = struct {
                 } else {
                     self.objects = next;
                 }
-                
+
                 self.freeObject(obj);
                 self.num_objects -= 1;
             } else {
@@ -186,7 +186,7 @@ pub const GC = struct {
                 obj.marked = 0;
                 prev = obj;
             }
-            
+
             current = next;
         }
     }
@@ -236,43 +236,7 @@ pub const GC = struct {
 // GC Allocator
 // =============================================================================
 
-pub const GCAllocator = struct {
-    gc: *GC,
-    backing_allocator: Allocator,
-
-    pub fn init(gc: *GC, backing_allocator: Allocator) GCAllocator {
-        return .{
-            .gc = gc,
-            .backing_allocator = backing_allocator,
-        };
-    }
-
-    pub fn allocator(self: *GCAllocator) Allocator {
-        return .{
-            .ptr = self,
-            .vtable = &Allocator.VTable{
-                .alloc = alloc,
-                .resize = resize,
-                .free = free,
-            },
-        };
-    }
-
-    fn alloc(ctx: *anyopaque, len: usize, ptr_align: u8, len_align: u8, ret_addr: usize) ?[*]u8 {
-        const self = @ptrCast(*GCAllocator, ctx);
-        return self.backing_allocator.rawAlloc(len, ptr_align, len_align, ret_addr);
-    }
-
-    fn resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_addr: usize) bool {
-        const self = @ptrCast(*GCAllocator, ctx);
-        return self.backing_allocator.rawResize(buf, buf_align, new_len, ret_addr);
-    }
-
-    fn free(ctx: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
-        const self = @ptrCast(*GCAllocator, ctx);
-        self.backing_allocator.rawFree(buf, buf_align, ret_addr);
-    }
-};
+// TODO: Implement GCAllocator when needed
 
 // =============================================================================
 // GC Helpers
