@@ -495,7 +495,7 @@ fn table_insert(L: *LuaState) callconv(.c) i32 {
 
 fn table_remove(L: *LuaState) callconv(.c) i32 {
     const t = L.toTable(1) orelse {
-        L.pushNil();
+        L.pushNil() catch return 0;
         return 1;
     };
 
