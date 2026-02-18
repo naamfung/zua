@@ -41,6 +41,9 @@ pub const LuaState = struct {
     globals: *Table,
     registry: *Table,
     
+    // String interning
+    string_pool: std.HashMap(u64, *String, StringHashContext, std.hash_map.default_max_load_percentage),
+    
     // Stack
     top: usize = 0,
     stack: []Value,
@@ -55,6 +58,19 @@ pub const LuaState = struct {
     
     // Error handling
     errfunc: i32 = 0,
+    
+    // String hash context for interning
+    const StringHashContext = struct {
+        pub fn hash(self: @This(), hash: u64) u32 {
+            _ = self;
+            return @as(u32, @truncate(hash));
+        }
+        
+        pub fn eql(self: @This(), a: u64, b: u64) bool {
+            _ = self;
+            return a == b;
+        }
+    };
     
     const Self = @This();
 
@@ -85,6 +101,7 @@ pub const LuaState = struct {
             .gc = ptr.gc,
             .globals = globals,
             .registry = registry,
+            .string_pool = std.HashMap(u64, *String, StringHashContext, std.hash_map.default_max_load_percentage).init(allocator),
             .top = 0,
             .stack = stack,
             .stack_size = 1024,
