@@ -1046,8 +1046,10 @@ fn math_random(L: *LuaState) callconv(.c) i32 {
         const upper: i64 = @intFromFloat(L.toNumber(1) orelse 1);
         L.pushNumber(@floatFromInt(random_state.?.random().intRangeAtMost(i64, 1, upper))) catch return 0;
     } else {
-        const lower: i64 = @intFromFloat(L.toNumber(1) orelse 1);
-        const upper: i64 = @intFromFloat(L.toNumber(2) orelse lower);
+        const lower_val = L.toNumber(1) orelse 1;
+        const upper_val = L.toNumber(2) orelse lower_val;
+        const lower: i64 = @intFromFloat(lower_val);
+        const upper: i64 = @intFromFloat(upper_val);
         L.pushNumber(@floatFromInt(random_state.?.random().intRangeAtMost(i64, lower, upper))) catch return 0;
     }
 
