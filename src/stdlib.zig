@@ -568,7 +568,8 @@ fn table_sort(L: *LuaState) callconv(.c) i32 {
     const t = L.toTable(1) orelse return 0;
 
     // Collect all array elements
-    var elements = std.ArrayList(Value).init(L.allocator);
+    var elements = std.ArrayList(Value){};
+    elements.* = std.ArrayList(Value).init(L.allocator);
     defer elements.deinit();
 
     const len = t.length();
