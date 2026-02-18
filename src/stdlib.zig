@@ -458,7 +458,7 @@ fn table_getn(L: *LuaState) callconv(.c) i32 {
         L.pushNumber(0) catch return 0;
         return 1;
     };
-    L.pushNumber(@floatFromInt(t.length()));
+    L.pushNumber(@floatFromInt(t.length())) catch return 0;
     return 1;
 }
 
@@ -501,7 +501,7 @@ fn table_remove(L: *LuaState) callconv(.c) i32 {
 
     const len = t.length();
     if (len == 0) {
-        L.pushNil();
+        L.pushNil() catch return 0;
         return 1;
     }
 
