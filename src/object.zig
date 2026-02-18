@@ -109,9 +109,9 @@ pub const Value = union(enum) {
     pub fn eql(a: Value, b: Value) bool {
         const a_tag = std.meta.activeTag(a);
         const b_tag = std.meta.activeTag(b);
-        
+
         if (a_tag != b_tag) return false;
-        
+
         return switch (a) {
             .nil => true,
             .boolean => |v| v == b.boolean,
@@ -254,7 +254,7 @@ pub const Table = struct {
             },
             else => {},
         }
-        
+
         if (self.map.get(key)) |val| {
             return val;
         }
@@ -265,7 +265,7 @@ pub const Table = struct {
         if (key == .nil) {
             return error.TableIndexIsNil;
         }
-        
+
         switch (key) {
             .number => |n| {
                 if (n >= 1.0 and n == @trunc(n)) {
@@ -281,7 +281,7 @@ pub const Table = struct {
             },
             else => {},
         }
-        
+
         if (value == .nil) {
             _ = self.map.remove(key);
         } else {
@@ -301,7 +301,7 @@ pub const Table = struct {
 
     pub fn next(self: *Table, key: Value) ?struct { key: Value, value: Value } {
         var start_idx: usize = 0;
-        
+
         if (key != .nil) {
             switch (key) {
                 .number => |n| {
@@ -315,7 +315,7 @@ pub const Table = struct {
                 else => {},
             }
         }
-        
+
         // Search array portion
         var i: usize = start_idx;
         while (i < self.array.items.len) : (i += 1) {
@@ -323,7 +323,7 @@ pub const Table = struct {
                 return .{ .key = .{ .number = @floatFromInt(i + 1) }, .value = self.array.items[i] };
             }
         }
-        
+
         // Search hash portion
         if (key == .nil) {
             var iter = self.map.iterator();
@@ -342,7 +342,7 @@ pub const Table = struct {
                 }
             }
         }
-        
+
         return null;
     }
 
@@ -447,9 +447,9 @@ pub const Function = struct {
             const a: i32 = instruction.a;
             const abc: Instruction.ABC = @bitCast(instruction);
             const abx: Instruction.ABx = @bitCast(instruction);
-            
+
             std.debug.print("\t{d}\t{s: <9}\t", .{ i + 1, @tagName(op) });
-            
+
             switch (op.getOpMode()) {
                 .iABC => {
                     std.debug.print("{d}", .{a});
@@ -483,6 +483,10 @@ pub const Function = struct {
             std.debug.print("\n", .{});
         }
     }
+
+    pub fn cast(obj: *GCObject) *Function {
+        return @ptrCast(@alignCast(obj));
+    }
 };
 
 // =============================================================================
@@ -498,7 +502,7 @@ pub const Closure = struct {
         const ptr = try allocator.create(Closure);
         const upvalues = try allocator.alloc(*UpValue, proto.num_upvalues);
         @memset(upvalues, undefined);
-        
+
         ptr.* = .{
             .gc = .{ .obj_type = .closure },
             .proto = proto,
@@ -510,6 +514,10 @@ pub const Closure = struct {
     pub fn deinit(self: *Closure, allocator: Allocator) void {
         allocator.free(self.upvalues);
         allocator.destroy(self);
+    }
+
+    pub fn cast(obj: *GCObject) *Closure {
+        return @ptrCast(@alignCast(obj));
     }
 };
 
@@ -529,7 +537,7 @@ pub const CClosure = struct {
         const ptr = try allocator.create(CClosure);
         const upvalues = try allocator.alloc(Value, num_upvalues);
         @memset(upvalues, .nil);
-        
+
         ptr.* = .{
             .gc = .{ .obj_type = .c_closure },
             .func = func,
@@ -541,6 +549,10 @@ pub const CClosure = struct {
     pub fn deinit(self: *CClosure, allocator: Allocator) void {
         allocator.free(self.upvalues);
         allocator.destroy(self);
+    }
+
+    pub fn cast(obj: *GCObject) *CClosure {
+        return @ptrCast(@alignCast(obj));
     }
 };
 
@@ -560,6 +572,10 @@ pub const UserData = struct {
             .data = data,
         };
     }
+
+    pub fn cast(obj: *GCObject) *UserData {
+        return @ptrCast(@alignCast(obj));
+    }
 };
 
 // =============================================================================
@@ -570,23 +586,23 @@ pub const Thread = struct {
     gc: GCObject,
     status: Status = .ok,
     allocator: Allocator,
-    
+
     // Stack
     stack: []Value,
     stack_top: usize = 0,
     stack_last: usize = 0,
-    
+
     // Call stack
     ci: CallInfo,
     base_ci: std.ArrayList(CallInfo),
-    
+
     // Open upvalues
     open_upval: ?*UpValue = null,
-    
+
     // Globals and registry
     globals: *Table,
     registry: *Table,
-    
+
     // Error handling
     errfunc: i32 = 0,
     error_msg: ?[]const u8 = null,
@@ -610,13 +626,13 @@ pub const Thread = struct {
         const ptr = try allocator.create(Thread);
         const stack = try allocator.alloc(Value, stack_size);
         @memset(stack, .nil);
-        
+
         const globals = try allocator.create(Table);
         globals.* = Table.init(allocator);
-        
+
         const registry = try allocator.create(Table);
         registry.* = Table.init(allocator);
-        
+
         ptr.* = .{
             .gc = .{ .obj_type = .thread },
             .allocator = allocator,
@@ -629,7 +645,7 @@ pub const Thread = struct {
             .globals = globals,
             .registry = registry,
         };
-        
+
         try ptr.base_ci.append(allocator, .{});
         return ptr;
     }
@@ -701,6 +717,10 @@ pub const Thread = struct {
             self.stack[target_idx] = value;
         }
     }
+
+    pub fn cast(obj: *GCObject) *Thread {
+        return @ptrCast(@alignCast(obj));
+    }
 };
 
 // =============================================================================
@@ -729,7 +749,7 @@ pub const Constant = union(enum) {
             const a_tag = std.meta.activeTag(a);
             const b_tag = std.meta.activeTag(b);
             if (a_tag != b_tag) return false;
-            
+
             return switch (a) {
                 .string => |v| std.mem.eql(u8, v, b.string),
                 .number => |v| v == b.number,
@@ -752,7 +772,7 @@ pub fn getChunkId(source: []const u8, buf: []u8) []u8 {
         @memcpy(buf[0..str.len], str);
         return buf[0..str.len];
     }
-    
+
     const buf_end: usize = buf_end: {
         switch (source[0]) {
             '=' => {
@@ -868,13 +888,13 @@ test "Table operations" {
     const allocator = std.testing.allocator;
     var table = Table.init(allocator);
     defer table.deinit();
-    
+
     try table.set(.{ .number = 1 }, .{ .number = 100 });
     try table.set(.{ .number = 2 }, .{ .number = 200 });
-    
+
     try std.testing.expectEqual(@as(f64, 100), table.get(.{ .number = 1 }).number);
     try std.testing.expectEqual(@as(f64, 200), table.get(.{ .number = 2 }).number);
-    
+
     try table.set(.{ .number = 1 }, .nil);
     try std.testing.expectEqual(Value.nil, table.get(.{ .number = 1 }));
 }
