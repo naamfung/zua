@@ -1101,9 +1101,25 @@ pub const LuaState = struct {
     }
 
     pub fn run(self: *Self) !void {
-        if (self.ci.func == .nil) return;
-        if (self.ci.func == .closure) {
-            try self.executeLua();
+        // Check if we have a function on the stack
+        if (self.top > 0) {
+            const func = self.stack[self.top - 1];
+            switch (func) {
+                .closure => {
+                    // Set up call info
+                    self.ci = .{
+                        .func = func,
+                        .base = self.top - 1,
+                        .saved_pc = 0,
+                        .num_results = 0,
+                        .is_lua = true,
+                    };
+                    try self.executeLua();
+                },
+                else => {
+                    return error.AttemptToCallNonFunction;
+                },
+            }
         }
     }
 };
