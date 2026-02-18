@@ -627,7 +627,7 @@ fn table_sort(L: *LuaState) callconv(.c) i32 {
 
 fn table_maxn(L: *LuaState) callconv(.c) i32 {
     const t = L.toTable(1) orelse {
-        L.pushNumber(0);
+        L.pushNumber(0) catch return 0;
         return 1;
     };
 
