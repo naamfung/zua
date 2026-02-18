@@ -227,7 +227,9 @@ pub const LuaState = struct {
     pub fn setField(self: *Self, idx: i32, k: []const u8) !void {
         const t = self.toTable(idx) orelse return error.ExpectedTable;
         const v = self.pop();
-        try t.set(.{ .string = try String.init(self.allocator, k) }, v);
+        const str = try String.init(self.allocator, k);
+        defer str.deinit(self.allocator);
+        try t.set(.{ .string = str }, v);
     }
 
     pub fn getField(self: *Self, idx: i32, k: []const u8) !void {
