@@ -598,6 +598,13 @@ pub const UserData = struct {
         };
     }
 
+    pub fn initWithGC(allocator: Allocator, gc: *zua.gc.GC, data: *anyopaque) !*UserData {
+        const ptr = try allocator.create(UserData);
+        ptr.* = UserData.init(data);
+        gc.addObject(&ptr.gc);
+        return ptr;
+    }
+
     pub fn cast(obj: *GCObject) *UserData {
         return @ptrCast(@alignCast(obj));
     }
@@ -672,6 +679,12 @@ pub const Thread = struct {
         };
 
         try ptr.base_ci.append(allocator, .{});
+        return ptr;
+    }
+
+    pub fn initWithGC(allocator: Allocator, gc: *zua.gc.GC, stack_size: usize) !*Thread {
+        const ptr = try Thread.init(allocator, stack_size);
+        gc.addObject(&ptr.gc);
         return ptr;
     }
 
