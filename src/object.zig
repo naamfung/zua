@@ -439,6 +439,25 @@ pub const Function = struct {
         }
     };
 
+    pub fn initWithGC(allocator: Allocator, gc: *zua.gc.GC, name: []const u8, code: []const Instruction, constants: []const Constant, protos: []*Function, max_stack_size: u8, num_params: u8, num_upvalues: u8, line_info: []i32, source: []const u8) !*Function {
+        const ptr = try allocator.create(Function);
+        ptr.* = .{
+            .gc = .{ .obj_type = .proto },
+            .name = name,
+            .code = code,
+            .constants = constants,
+            .protos = protos,
+            .max_stack_size = max_stack_size,
+            .num_params = num_params,
+            .num_upvalues = num_upvalues,
+            .line_info = line_info,
+            .source = source,
+            .allocator = allocator,
+        };
+        gc.addObject(&ptr.gc);
+        return ptr;
+    }
+
     pub fn deinit(self: *Function) void {
         if (self.allocator) |alloc| {
             for (self.constants) |c| {

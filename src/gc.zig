@@ -22,10 +22,23 @@ pub const GC = struct {
     threshold: usize = 1024,
     allocator: Allocator,
 
+    // Root objects for garbage collection
+    roots: ?Roots = null,
+
+    pub const Roots = struct {
+        globals: ?*object.Table = null,
+        registry: ?*object.Table = null,
+        main_thread: ?*object.Thread = null,
+    };
+
     pub fn init(allocator: Allocator) GC {
         return .{
             .allocator = allocator,
         };
+    }
+
+    pub fn setRoots(self: *GC, roots: Roots) void {
+        self.roots = roots;
     }
 
     pub fn collect(self: *GC) void {
@@ -52,19 +65,41 @@ pub const GC = struct {
 
     fn markRoots(self: *GC) void {
         // Mark all root objects
-        // TODO: In a real implementation, we would need to:
-        // 1. Mark all values on the main thread stack
-        // 2. Mark the global environment table
-        // 3. Mark the registry table
-        // 4. Mark any open upvalues
-        // 5. Mark any other root objects
+        if (self.roots) |roots| {
+            // Mark global environment table
+            if (roots.globals) |globals| {
+                self.markObject(&globals.gc);
+            }
 
-        // For now, we'll just mark all objects to prevent them from being collected
-        // This is a temporary solution to test the GC infrastructure
-        var current = self.objects;
-        while (current) |obj| {
-            self.markObject(obj);
-            current = obj.next;
+            // Mark registry table
+            if (roots.registry) |registry| {
+                self.markObject(&registry.gc);
+            }
+
+            // Mark main thread and its stack
+            if (roots.main_thread) |thread| {
+                self.markObject(&thread.gc);
+
+                // Mark stack values
+                for (0..thread.stack_top) |i| {
+                    self.markValue(thread.stack[i]);
+                }
+
+                // Mark open upvalues
+                var upval = thread.open_upval;
+                while (upval) |uv| {
+                    self.markObject(&uv.gc);
+                    upval = uv.next;
+                }
+            }
+        } else {
+            // Fallback: mark all objects if roots not set
+            // This is a temporary solution to test the GC infrastructure
+            var current = self.objects;
+            while (current) |obj| {
+                self.markObject(obj);
+                current = obj.next;
+            }
         }
     }
 
