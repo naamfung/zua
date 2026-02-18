@@ -540,7 +540,7 @@ fn table_concat(L: *LuaState) callconv(.c) i32 {
     else
         t.length();
 
-    var result = std.ArrayList(u8).init(L.allocator);
+    var result = std.ArrayList(u8){ .allocator = L.allocator };
 
     var i: usize = start;
     while (i <= end) : (i += 1) {
@@ -568,8 +568,7 @@ fn table_sort(L: *LuaState) callconv(.c) i32 {
     const t = L.toTable(1) orelse return 0;
 
     // Collect all array elements
-    var elements = std.ArrayList(Value){};
-    elements.* = std.ArrayList(Value).init(L.allocator);
+    var elements = std.ArrayList(Value){ .allocator = L.allocator };
     defer elements.deinit();
 
     const len = t.length();
@@ -714,8 +713,7 @@ fn string_sub(L: *LuaState) callconv(.c) i32 {
 
 fn string_lower(L: *LuaState) callconv(.c) i32 {
     const s = L.toString(1) orelse "";
-    var result = std.ArrayList(u8){};
-    result.* = std.ArrayList(u8).init(L.allocator);
+    var result = std.ArrayList(u8){ .allocator = L.allocator };
 
     for (s) |c| {
         result.append(std.ascii.toLower(c)) catch {};
@@ -729,8 +727,7 @@ fn string_lower(L: *LuaState) callconv(.c) i32 {
 
 fn string_upper(L: *LuaState) callconv(.c) i32 {
     const s = L.toString(1) orelse "";
-    var result = std.ArrayList(u8){};
-    result.* = std.ArrayList(u8).init(L.allocator);
+    var result = std.ArrayList(u8){ .allocator = L.allocator };
 
     for (s) |c| {
         result.append(std.ascii.toUpper(c)) catch {};
@@ -746,8 +743,7 @@ fn string_rep(L: *LuaState) callconv(.c) i32 {
     const s = L.toString(1) orelse "";
     const n: usize = @intFromFloat(L.toNumber(2) orelse 0);
 
-    var result = std.ArrayList(u8){};
-    result.* = std.ArrayList(u8).init(L.allocator);
+    var result = std.ArrayList(u8){ .allocator = L.allocator };
     var i: usize = 0;
     while (i < n) : (i += 1) {
         result.appendSlice(s) catch {};
@@ -783,8 +779,7 @@ fn string_format(L: *LuaState) callconv(.c) i32 {
     const fmt = L.toString(1) orelse "";
 
     // Very simplified format implementation
-    var result = std.ArrayList(u8){};
-    result.* = std.ArrayList(u8).init(L.allocator);
+    var result = std.ArrayList(u8){ .allocator = L.allocator };
     var arg_idx: i32 = 2;
     var i: usize = 0;
 
@@ -859,8 +854,7 @@ fn string_byte(L: *LuaState) callconv(.c) i32 {
 
 fn string_char(L: *LuaState) callconv(.c) i32 {
     const n = L.getTop();
-    var result = std.ArrayList(u8){};
-    result.* = std.ArrayList(u8).init(L.allocator);
+    var result = std.ArrayList(u8){ .allocator = L.allocator };
 
     var i: i32 = 1;
     while (i <= n) : (i += 1) {
