@@ -714,14 +714,15 @@ fn string_sub(L: *LuaState) callconv(.c) i32 {
 
 fn string_lower(L: *LuaState) callconv(.c) i32 {
     const s = L.toString(1) orelse "";
-    var result = std.ArrayList(u8).init(L.allocator);
+    var result = std.ArrayList(u8){};
+    result.* = std.ArrayList(u8).init(L.allocator);
 
     for (s) |c| {
         result.append(std.ascii.toLower(c)) catch {};
     }
 
     const str = result.toOwnedSlice() catch "";
-    L.pushString(str) catch {};
+    L.pushString(str) catch return 0;
     L.allocator.free(str);
     return 1;
 }
