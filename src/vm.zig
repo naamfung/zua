@@ -63,13 +63,21 @@ pub const LuaState = struct {
         const stack = try allocator.alloc(Value, 1024);
         @memset(stack, .nil);
         
-        const thread = try Thread.init(allocator, 1024);
-        
         ptr.gc = GC.init(allocator);
+        
+        const thread = try Thread.initWithGC(allocator, &ptr.gc, 1024);
         
         const globals = try Table.initWithGC(allocator, &ptr.gc);
         
         const registry = try Table.initWithGC(allocator, &ptr.gc);
+        
+        // Set GC roots
+        const roots = GC.Roots{
+            .globals = globals,
+            .registry = registry,
+            .main_thread = thread,
+        };
+        ptr.gc.setRoots(roots);
         
         ptr.* = .{
             .allocator = allocator,
