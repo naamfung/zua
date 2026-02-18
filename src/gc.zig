@@ -50,15 +50,22 @@ pub const GC = struct {
         }
     }
 
-    fn markRoots(_: *GC) void {
+    fn markRoots(self: *GC) void {
         // Mark all root objects
-        // TODO: Mark from main thread stack, globals, registry, etc.
-        // This is a placeholder - in a real implementation, we would need to:
+        // TODO: In a real implementation, we would need to:
         // 1. Mark all values on the main thread stack
         // 2. Mark the global environment table
         // 3. Mark the registry table
         // 4. Mark any open upvalues
         // 5. Mark any other root objects
+
+        // For now, we'll just mark all objects to prevent them from being collected
+        // This is a temporary solution to test the GC infrastructure
+        var current = self.objects;
+        while (current) |obj| {
+            self.markObject(obj);
+            current = obj.next;
+        }
     }
 
     fn markObject(self: *GC, obj: *GCObject) void {
