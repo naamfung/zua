@@ -249,12 +249,12 @@ fn base_pcall(L: *LuaState) callconv(.c) i32 {
     const n = L.getTop();
 
     L.call(n - 1, -1) catch {
-        L.pushBoolean(false);
+        L.pushBoolean(false) catch return 0;
         L.insert(-2) catch {};
         return 2;
     };
 
-    L.pushBoolean(true);
+    L.pushBoolean(true) catch return 0;
     L.insert(-2) catch {};
     return L.getTop();
 }
@@ -265,7 +265,7 @@ fn base_select(L: *LuaState) callconv(.c) i32 {
     if (L.isString(1)) {
         const s = L.toString(1) orelse "";
         if (s.len > 0 and s[0] == '#') {
-            L.pushNumber(@floatFromInt(n - 1));
+            L.pushNumber(@floatFromInt(n - 1)) catch return 0;
             return 1;
         }
     }
