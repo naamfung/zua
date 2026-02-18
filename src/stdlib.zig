@@ -376,8 +376,8 @@ fn base_loadstring(L: *LuaState) callconv(.c) i32 {
     const source = L.toString(1) orelse "";
 
     L.load(source, "[string]") catch {
-        L.pushNil();
-        L.pushString("error loading string") catch {};
+        L.pushNil() catch return 0;
+        L.pushString("error loading string") catch return 0;
         return 2;
     };
 
@@ -388,10 +388,10 @@ fn base_loadfile(L: *LuaState) callconv(.c) i32 {
     const filename = L.toString(1) orelse "";
 
     const file = std.fs.cwd().openFile(filename, .{}) catch {
-        L.pushNil();
+        L.pushNil() catch return 0;
         var buf: [256]u8 = undefined;
         const msg = std.fmt.bufPrint(&buf, "cannot open {s}", .{filename}) catch "cannot open file";
-        L.pushString(msg) catch {};
+        L.pushString(msg) catch return 0;
         return 2;
     };
     defer file.close();
