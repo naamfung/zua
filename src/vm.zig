@@ -212,7 +212,9 @@ pub const LuaState = struct {
 
     pub fn setGlobal(self: *Self, name: []const u8) !void {
         const value = self.pop();
-        try self.globals.set(.{ .string = try String.init(self.allocator, name) }, value);
+        const str = try String.init(self.allocator, name);
+        defer str.deinit(self.allocator);
+        try self.globals.set(.{ .string = str }, value);
     }
 
     pub fn getGlobal(self: *Self, name: []const u8) !void {
