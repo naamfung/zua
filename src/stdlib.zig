@@ -565,8 +565,62 @@ fn table_concat(L: *LuaState) callconv(.C) i32 {
 }
 
 fn table_sort(L: *LuaState) callconv(.C) i32 {
-    _ = L;
-    // TODO: Implement sorting
+    const t = L.toTable(1) orelse return 0;
+    
+    // Collect all array elements
+    var elements = std.ArrayList(Value).init(L.allocator);
+    defer elements.deinit();
+    
+    const len = t.length();
+    var i: usize = 1;
+    while (i <= len) : (i += 1) {
+        const val = t.get(.{ .number = @floatFromInt(i) });
+        try elements.append(val);
+    }
+    
+    // Simple insertion sort
+    var j: usize = 1;
+    while (j < elements.items.len) : (j += 1) {
+        const key = elements.items[j];
+        var k: usize = j - 1;
+        while (k >= 0) : (k -= 1) {
+            // TODO: Use custom comparator if provided
+            const a = elements.items[k];
+            const b = key;
+            var less = false;
+            
+            switch (a) {
+                .number => |n1| {
+                    if (b == .number) {
+                        less = n1 < b.number;
+                    } else if (b == .string) {
+                        less = true; // number < string
+                    }
+                },
+                .string => |s1| {
+                    if (b == .string) {
+                        less = std.mem.lessThan(u8, s1.asSlice(), b.string.asSlice());
+                    } else if (b == .number) {
+                        less = false; // string > number
+                    }
+                },
+                else => {},
+            }
+            
+            if (!less) break;
+            elements.items[k + 1] = elements.items[k];
+            if (k == 0) break;
+        }
+        elements.items[k + 1] = key;
+    }
+    
+    // Write sorted elements back to the table
+    i = 1;
+    for (elements.items) |val| {
+        t.set(.{ .number = @floatFromInt(i) }, val) catch return 0;
+        i += 1;
+    }
+    
     return 0;
 }
 
