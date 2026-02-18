@@ -16,7 +16,7 @@ pub const Tree = struct {
     }
 
     pub fn chunk(self: *Tree) *Node.Chunk {
-        return @fieldParentPtr(Node.Chunk, "base", self.node);
+        return @alignCast(@fieldParentPtr("base", self.node));
     }
 
     pub fn dump(self: *Tree, writer: anytype) @TypeOf(writer).Error!void {
@@ -81,7 +81,7 @@ pub const Node = struct {
 
     pub fn cast(base: *Node, comptime id: Id) ?*id.Type() {
         if (base.id == id) {
-            return @fieldParentPtr(id.Type(), "base", base);
+            return @alignCast(@fieldParentPtr("base", base));
         }
         return null;
     }
@@ -236,23 +236,23 @@ pub const Node = struct {
     pub fn getLastToken(node: *const Node) Token {
         switch (node.id) {
             .identifier => {
-                const casted = @fieldParentPtr(Node.Identifier, "base", node);
+                const casted: *const Identifier = @alignCast(@fieldParentPtr("base", node));
                 return casted.token;
             },
             .grouped_expression => {
-                const casted = @fieldParentPtr(Node.GroupedExpression, "base", node);
+                const casted: *const GroupedExpression = @alignCast(@fieldParentPtr("base", node));
                 return casted.close_token;
             },
             .field_access => {
-                const casted = @fieldParentPtr(Node.FieldAccess, "base", node);
+                const casted: *const FieldAccess = @alignCast(@fieldParentPtr("base", node));
                 return casted.field;
             },
             .index_access => {
-                const casted = @fieldParentPtr(Node.IndexAccess, "base", node);
+                const casted: *const IndexAccess = @alignCast(@fieldParentPtr("base", node));
                 return casted.close_token;
             },
             .call => {
-                const casted = @fieldParentPtr(Node.Call, "base", node);
+                const casted: *const Call = @alignCast(@fieldParentPtr("base", node));
                 if (casted.close_args_token) |close_token| {
                     return close_token;
                 } else {
@@ -260,11 +260,11 @@ pub const Node = struct {
                 }
             },
             .literal => {
-                const casted = @fieldParentPtr(Node.Literal, "base", node);
+                const casted: *const Literal = @alignCast(@fieldParentPtr("base", node));
                 return casted.token;
             },
             .table_constructor => {
-                const casted = @fieldParentPtr(Node.TableConstructor, "base", node);
+                const casted: *const TableConstructor = @alignCast(@fieldParentPtr("base", node));
                 return casted.close_token;
             },
             else => {
@@ -284,14 +284,14 @@ pub const Node = struct {
         switch (node.id) {
             .chunk => {
                 try writer.writeAll("\n");
-                const chunk = @fieldParentPtr(Node.Chunk, "base", node);
+                const chunk: *const Chunk = @alignCast(@fieldParentPtr("base", node));
                 for (chunk.body) |body_node| {
                     try body_node.dump(writer, indent + 1);
                 }
             },
             .call => {
                 try writer.writeAll("\n");
-                const call = @fieldParentPtr(Node.Call, "base", node);
+                const call: *const Call = @alignCast(@fieldParentPtr("base", node));
                 try call.expression.dump(writer, indent + 1);
                 try writer.writeByteNTimes(' ', indent + 1);
                 try writer.writeAll("(");
@@ -308,13 +308,13 @@ pub const Node = struct {
                 try writer.writeAll("\n");
             },
             .literal => {
-                const literal = @fieldParentPtr(Node.Literal, "base", node);
+                const literal: *const Literal = @alignCast(@fieldParentPtr("base", node));
                 try writer.writeAll(" ");
                 try writer.writeAll(literal.token.nameForDisplay());
                 try writer.writeAll("\n");
             },
             .assignment_statement => {
-                const assignment = @fieldParentPtr(Node.AssignmentStatement, "base", node);
+                const assignment: *const AssignmentStatement = @alignCast(@fieldParentPtr("base", node));
                 if (assignment.is_local) {
                     try writer.writeAll(" local");
                 }
@@ -331,7 +331,7 @@ pub const Node = struct {
                 }
             },
             .field_access => {
-                const field_access = @fieldParentPtr(Node.FieldAccess, "base", node);
+                const field_access: *const FieldAccess = @alignCast(@fieldParentPtr("base", node));
                 try writer.writeAll(" ");
                 try writer.writeAll(field_access.separator.nameForDisplay());
                 try writer.writeAll(field_access.field.nameForDisplay());
@@ -339,20 +339,20 @@ pub const Node = struct {
                 try field_access.prefix.dump(writer, indent + 1);
             },
             .index_access => {
-                const index_access = @fieldParentPtr(Node.IndexAccess, "base", node);
+                const index_access: *const IndexAccess = @alignCast(@fieldParentPtr("base", node));
                 try writer.writeAll("\n");
                 try index_access.prefix.dump(writer, indent + 1);
                 try index_access.index.dump(writer, indent + 1);
             },
             .if_statement => {
-                const if_statement = @fieldParentPtr(Node.IfStatement, "base", node);
+                const if_statement: *const IfStatement = @alignCast(@fieldParentPtr("base", node));
                 try writer.writeAll("\n");
                 for (if_statement.clauses) |clause| {
                     try clause.dump(writer, indent + 1);
                 }
             },
             .if_clause => {
-                const if_clause = @fieldParentPtr(Node.IfClause, "base", node);
+                const if_clause: *const IfClause = @alignCast(@fieldParentPtr("base", node));
                 try writer.writeAll(" ");
                 try writer.writeAll(if_clause.if_token.nameForDisplay());
                 try writer.writeAll("\n");
@@ -366,14 +366,14 @@ pub const Node = struct {
                 }
             },
             .return_statement => {
-                const return_statement = @fieldParentPtr(Node.ReturnStatement, "base", node);
+                const return_statement: *const ReturnStatement = @alignCast(@fieldParentPtr("base", node));
                 try writer.writeAll("\n");
                 for (return_statement.values) |value_node| {
                     try value_node.dump(writer, indent + 1);
                 }
             },
             .while_statement => {
-                const while_statement = @fieldParentPtr(Node.WhileStatement, "base", node);
+                const while_statement: *const WhileStatement = @alignCast(@fieldParentPtr("base", node));
                 try writer.writeAll("\n");
                 try while_statement.condition.dump(writer, indent + 1);
                 try writer.writeByteNTimes(' ', indent);
@@ -383,14 +383,14 @@ pub const Node = struct {
                 }
             },
             .do_statement => {
-                const do_statement = @fieldParentPtr(Node.DoStatement, "base", node);
+                const do_statement: *const DoStatement = @alignCast(@fieldParentPtr("base", node));
                 try writer.writeAll("\n");
                 for (do_statement.body) |body_node| {
                     try body_node.dump(writer, indent + 1);
                 }
             },
             .repeat_statement => {
-                const repeat_statement = @fieldParentPtr(Node.RepeatStatement, "base", node);
+                const repeat_statement: *const RepeatStatement = @alignCast(@fieldParentPtr("base", node));
                 try writer.writeAll("\n");
                 for (repeat_statement.body) |body_node| {
                     try body_node.dump(writer, indent + 1);
@@ -403,7 +403,7 @@ pub const Node = struct {
                 try writer.writeAll("\n");
             },
             .for_statement_numeric => {
-                const for_statement = @fieldParentPtr(Node.ForStatementNumeric, "base", node);
+                const for_statement: *const ForStatementNumeric = @alignCast(@fieldParentPtr("base", node));
                 try writer.writeAll("\n");
                 try for_statement.start.dump(writer, indent + 1);
                 try for_statement.end.dump(writer, indent + 1);
@@ -417,7 +417,7 @@ pub const Node = struct {
                 }
             },
             .for_statement_generic => {
-                const for_statement = @fieldParentPtr(Node.ForStatementGeneric, "base", node);
+                const for_statement: *const ForStatementGeneric = @alignCast(@fieldParentPtr("base", node));
                 for (for_statement.names) |name_token| {
                     try writer.writeAll(" ");
                     try writer.writeAll(name_token.nameForDisplay());
@@ -435,7 +435,7 @@ pub const Node = struct {
                 }
             },
             .function_declaration => {
-                const func = @fieldParentPtr(Node.FunctionDeclaration, "base", node);
+                const func: *const FunctionDeclaration = @alignCast(@fieldParentPtr("base", node));
                 if (func.is_local) {
                     try writer.writeAll(" local");
                 }
@@ -455,14 +455,14 @@ pub const Node = struct {
                 }
             },
             .table_constructor => {
-                const constructor = @fieldParentPtr(Node.TableConstructor, "base", node);
+                const constructor: *const TableConstructor = @alignCast(@fieldParentPtr("base", node));
                 try writer.writeAll("\n");
                 for (constructor.fields) |field| {
                     try field.dump(writer, indent + 1);
                 }
             },
             .table_field => {
-                const field = @fieldParentPtr(Node.TableField, "base", node);
+                const field: *const TableField = @alignCast(@fieldParentPtr("base", node));
                 try writer.writeAll("\n");
                 if (field.key) |key| {
                     try key.dump(writer, indent + 1);
@@ -472,14 +472,14 @@ pub const Node = struct {
                 try field.value.dump(writer, indent + 1);
             },
             .unary_expression => {
-                const unary = @fieldParentPtr(Node.UnaryExpression, "base", node);
+                const unary: *const UnaryExpression = @alignCast(@fieldParentPtr("base", node));
                 try writer.writeAll(" ");
                 try writer.writeAll(unary.operator.nameForDisplay());
                 try writer.writeAll("\n");
                 try unary.argument.dump(writer, indent + 1);
             },
             .binary_expression => {
-                const binary = @fieldParentPtr(Node.BinaryExpression, "base", node);
+                const binary: *const BinaryExpression = @alignCast(@fieldParentPtr("base", node));
                 try writer.writeAll(" ");
                 try writer.writeAll(binary.operator.nameForDisplay());
                 try writer.writeAll("\n");
@@ -487,7 +487,7 @@ pub const Node = struct {
                 try binary.right.dump(writer, indent + 1);
             },
             .grouped_expression => {
-                const grouped = @fieldParentPtr(Node.GroupedExpression, "base", node);
+                const grouped: *const GroupedExpression = @alignCast(@fieldParentPtr("base", node));
                 try writer.writeAll("\n");
                 try writer.writeByteNTimes(' ', indent);
                 try writer.writeAll(grouped.open_token.nameForDisplay());

@@ -69,8 +69,8 @@ pub const ParseErrorContext = struct {
     err: ParseError,
 
     pub fn renderAlloc(self: *ParseErrorContext, allocator: Allocator, parser: *Parser) ![]const u8 {
-        var buffer = std.ArrayList(u8).init(allocator);
-        errdefer buffer.deinit();
+        var buffer = std.ArrayList(u8){};
+        errdefer buffer.deinit(allocator);
 
         var msg_buf: [256]u8 = undefined;
         const msg = msg: {
@@ -89,7 +89,7 @@ pub const ParseErrorContext = struct {
                 break :msg parse_error_strings.get(self.err).?;
             }
         };
-        const error_writer = buffer.writer();
+        const error_writer = buffer.writer(allocator);
         const MAXSRC = 80; // see MAXSRC in llex.c
         var chunk_id_buf: [MAXSRC]u8 = undefined;
         const chunk_id = zua.object.getChunkId(parser.lexer.chunk_name, &chunk_id_buf);
@@ -98,7 +98,7 @@ pub const ParseErrorContext = struct {
         if (!self.token.isChar(0) and self.err != ParseError.TooManySyntaxLevels) {
             try error_writer.print(" near '{s}'", .{self.token.nameForErrorDisplay(parser.lexer.buffer)});
         }
-        return buffer.toOwnedSlice();
+        return buffer.toOwnedSlice(allocator);
     }
 };
 
@@ -156,8 +156,8 @@ pub const Parser = struct {
 
     /// chunk -> { stat [`;'] }
     fn chunk(self: *Self) Error!*Node {
-        var statements = std.ArrayList(*Node).init(self.state.allocator);
-        defer statements.deinit();
+        var statements = std.ArrayList(*Node){};
+        defer statements.deinit(self.state.allocator);
 
         try self.block(&statements);
         try self.check(.eof);
@@ -196,7 +196,7 @@ pub const Parser = struct {
         try self.enterlevel();
         while (!blockFollow(self.state.token)) {
             const stat = try self.statement();
-            try list.append(stat);
+            try list.append(self.state.allocator, stat);
             _ = try self.testcharnext(';');
             const must_be_last_statement = stat.id == .return_statement or stat.id == .break_statement;
             if (must_be_last_statement) {
@@ -221,7 +221,7 @@ pub const Parser = struct {
                 },
                 else => return self.reportParseError(ParseError.ExpectedNameOrVarArg),
             }
-            try list.append(self.state.token);
+            try list.append(self.state.allocator, self.state.token);
             try self.nextToken();
             if (found_vararg or !try self.testcharnext(',')) {
                 break;
@@ -234,15 +234,15 @@ pub const Parser = struct {
     fn funcbody(self: *Self, function_token: Token, name: ?*Node, is_local: bool) Error!*Node {
         try self.checkcharnext('(');
 
-        var params = std.ArrayList(Token).init(self.state.allocator);
-        defer params.deinit();
+        var params = std.ArrayList(Token){};
+        defer params.deinit(self.state.allocator);
 
         const vararg_found = try self.parlist(&params);
 
         try self.checkcharnext(')');
 
-        var body = std.ArrayList(*Node).init(self.state.allocator);
-        defer body.deinit();
+        var body = std.ArrayList(*Node){};
+        defer body.deinit(self.state.allocator);
 
         const in_vararg_func_prev = self.state.in_vararg_func;
         self.state.in_vararg_func = vararg_found;
@@ -315,8 +315,8 @@ pub const Parser = struct {
         std.debug.assert(self.state.token.id == .keyword_return);
         try self.nextToken();
 
-        var return_values = std.ArrayList(*Node).init(self.state.allocator);
-        defer return_values.deinit();
+        var return_values = std.ArrayList(*Node){};
+        defer return_values.deinit(self.state.allocator);
 
         const no_return_values = blockFollow(self.state.token) or (self.state.token.isChar(';'));
         if (!no_return_values) {
@@ -346,8 +346,8 @@ pub const Parser = struct {
 
         try self.checknext(.keyword_do);
 
-        var body = std.ArrayList(*Node).init(self.state.allocator);
-        defer body.deinit();
+        var body = std.ArrayList(*Node){};
+        defer body.deinit(self.state.allocator);
 
         const in_loop_prev = self.state.in_loop;
         self.state.in_loop = true;
@@ -385,8 +385,8 @@ pub const Parser = struct {
         const do_token = self.state.token;
         try self.nextToken();
 
-        var body = std.ArrayList(*Node).init(self.state.allocator);
-        defer body.deinit();
+        var body = std.ArrayList(*Node){};
+        defer body.deinit(self.state.allocator);
 
         try self.block(&body);
 
@@ -405,8 +405,8 @@ pub const Parser = struct {
         const repeat_token = self.state.token;
         try self.nextToken();
 
-        var body = std.ArrayList(*Node).init(self.state.allocator);
-        defer body.deinit();
+        var body = std.ArrayList(*Node){};
+        defer body.deinit(self.state.allocator);
 
         const in_loop_prev = self.state.in_loop;
         self.state.in_loop = true;
@@ -468,8 +468,8 @@ pub const Parser = struct {
 
         try self.checknext(.keyword_do);
 
-        var body = std.ArrayList(*Node).init(self.state.allocator);
-        defer body.deinit();
+        var body = std.ArrayList(*Node){};
+        defer body.deinit(self.state.allocator);
 
         const in_loop_prev = self.state.in_loop;
         self.state.in_loop = true;
@@ -490,25 +490,25 @@ pub const Parser = struct {
     /// forlist -> NAME {,NAME} IN explist1 forbody
     fn forlist(self: *Self, first_name_token: Token) Error!*Node {
         var names = try std.ArrayList(Token).initCapacity(self.state.allocator, 1);
-        defer names.deinit();
+        defer names.deinit(self.state.allocator);
 
         names.appendAssumeCapacity(first_name_token);
 
         while (try self.testcharnext(',')) {
             const name_token = try self.checkname();
-            try names.append(name_token);
+            try names.append(self.state.allocator, name_token);
         }
         try self.checknext(.keyword_in);
 
-        var expressions = std.ArrayList(*Node).init(self.state.allocator);
-        defer expressions.deinit();
+        var expressions = std.ArrayList(*Node){};
+        defer expressions.deinit(self.state.allocator);
 
         _ = try self.explist1(&expressions);
 
         try self.checknext(.keyword_do);
 
-        var body = std.ArrayList(*Node).init(self.state.allocator);
-        defer body.deinit();
+        var body = std.ArrayList(*Node){};
+        defer body.deinit(self.state.allocator);
 
         const in_loop_prev = self.state.in_loop;
         self.state.in_loop = true;
@@ -541,8 +541,8 @@ pub const Parser = struct {
             else => unreachable,
         }
 
-        var body = std.ArrayList(*Node).init(self.state.allocator);
-        defer body.deinit();
+        var body = std.ArrayList(*Node){};
+        defer body.deinit(self.state.allocator);
 
         try self.block(&body);
 
@@ -560,23 +560,23 @@ pub const Parser = struct {
         std.debug.assert(self.state.token.id == .keyword_if);
         const if_token = self.state.token;
 
-        var clauses = std.ArrayList(*Node).init(self.state.allocator);
-        defer clauses.deinit();
+        var clauses = std.ArrayList(*Node){};
+        defer clauses.deinit(self.state.allocator);
 
         // if
         const if_clause = try self.ifclause();
-        try clauses.append(if_clause);
+        try clauses.append(self.state.allocator, if_clause);
 
         // elseif
         while (self.state.token.id == .keyword_elseif) {
             const elseif_clause = try self.ifclause();
-            try clauses.append(elseif_clause);
+            try clauses.append(self.state.allocator, elseif_clause);
         }
 
         // else
         if (self.state.token.id == .keyword_else) {
             const else_clause = try self.ifclause();
-            try clauses.append(else_clause);
+            try clauses.append(self.state.allocator, else_clause);
         }
 
         try self.check_match(.keyword_end, if_token);
@@ -646,8 +646,8 @@ pub const Parser = struct {
         const open_brace_token = self.state.token;
         try self.checkcharnext('{');
 
-        var fields = std.ArrayList(*Node).init(self.state.allocator);
-        defer fields.deinit();
+        var fields = std.ArrayList(*Node){};
+        defer fields.deinit(self.state.allocator);
 
         while (!self.state.token.isChar('}')) {
             const field: *Node = get_field: {
@@ -670,7 +670,7 @@ pub const Parser = struct {
                     else => break :get_field try self.listfield(),
                 }
             };
-            try fields.append(field);
+            try fields.append(self.state.allocator, field);
 
             const has_more = (try self.testcharnext(',')) or (try self.testcharnext(';'));
             if (!has_more) break;
@@ -697,18 +697,18 @@ pub const Parser = struct {
     fn assignment(self: *Self, first_variable: ?PossibleLValueExpression) Error!*Node {
         const is_local = first_variable == null;
 
-        var variables = std.ArrayList(*Node).init(self.state.allocator);
-        defer variables.deinit();
+        var variables = std.ArrayList(*Node){};
+        defer variables.deinit(self.state.allocator);
 
-        var values = std.ArrayList(*Node).init(self.state.allocator);
-        defer values.deinit();
+        var values = std.ArrayList(*Node){};
+        defer values.deinit(self.state.allocator);
 
         if (is_local) {
             while (true) {
                 const name_token = try self.checkname();
                 var identifier = try self.state.arena.create(Node.Identifier);
                 identifier.* = .{ .token = name_token };
-                try variables.append(&identifier.base);
+                try variables.append(self.state.allocator, &identifier.base);
 
                 // TODO this needs work, it doesn't really belong here.
                 // We need to keep track of *all* local vars in order to function
@@ -729,7 +729,7 @@ pub const Parser = struct {
                 if (!variable.can_be_assigned_to) {
                     return self.reportParseError(ParseError.SyntaxError);
                 }
-                try variables.append(variable.node);
+                try variables.append(self.state.allocator, variable.node);
                 if (try self.testcharnext(',')) {
                     variable = try self.primaryexp();
                 } else {
@@ -753,7 +753,7 @@ pub const Parser = struct {
     fn exprstat(self: *Self) Error!*Node {
         var expression = try self.primaryexp();
         if (expression.node.id == .call) {
-            const call_node = @fieldParentPtr(Node.Call, "base", expression.node);
+            const call_node: *Node.Call = @alignCast(@fieldParentPtr("base", expression.node));
             call_node.is_statement = true;
         } else {
             // if it's not a call, then it's an assignment
@@ -764,9 +764,9 @@ pub const Parser = struct {
 
     fn explist1(self: *Self, list: *std.ArrayList(*Node)) Error!usize {
         const num_expressions: usize = 1;
-        try list.append(try self.expr());
+        try list.append(self.state.allocator, try self.expr());
         while (try self.testcharnext(',')) {
-            try list.append(try self.expr());
+            try list.append(self.state.allocator, try self.expr());
         }
         return num_expressions;
     }
@@ -861,8 +861,8 @@ pub const Parser = struct {
     }
 
     fn primaryexp(self: *Self) Error!PossibleLValueExpression {
-        var arguments = std.ArrayList(*Node).init(self.state.allocator);
-        defer arguments.deinit();
+        var arguments = std.ArrayList(*Node){};
+        defer arguments.deinit(self.state.allocator);
 
         var expression = try self.prefixexp();
         loop: while (true) {
@@ -935,8 +935,8 @@ pub const Parser = struct {
     }
 
     fn funcargs(self: *Self, expression: *Node) Error!*Node {
-        var arguments = std.ArrayList(*Node).init(self.state.allocator);
-        defer arguments.deinit();
+        var arguments = std.ArrayList(*Node){};
+        defer arguments.deinit(self.state.allocator);
 
         var open_args_token: ?Token = null;
         var close_args_token: ?Token = null;
@@ -958,7 +958,7 @@ pub const Parser = struct {
                 },
                 '{' => {
                     const node = try self.constructor();
-                    try arguments.append(node);
+                    try arguments.append(self.state.allocator, node);
                 },
                 else => {
                     return self.reportParseError(ParseError.FunctionArgumentsExpected);
@@ -969,7 +969,7 @@ pub const Parser = struct {
                 node.* = .{
                     .token = self.state.token,
                 };
-                try arguments.append(&node.base);
+                try arguments.append(self.state.allocator, &node.base);
                 try self.nextToken();
             },
             else => return self.reportParseError(ParseError.FunctionArgumentsExpected),
@@ -1237,10 +1237,10 @@ fn testParse(source: []const u8, expected_ast_dump: []const u8) !void {
     var tree = try parser.parse(allocator);
     defer tree.deinit();
 
-    var buf = std.ArrayList(u8).init(allocator);
-    defer buf.deinit();
+    var buf = std.ArrayList(u8){};
+    defer buf.deinit(allocator);
 
-    try tree.dump(buf.writer());
+    try tree.dump(buf.writer(allocator));
     try std.testing.expectEqualStrings(expected_ast_dump, buf.items);
 }
 

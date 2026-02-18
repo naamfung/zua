@@ -44,22 +44,28 @@ pub fn loadAndDumpAlloc(allocator: Allocator, chunk: [:0]const u8) ![]const u8 {
     const gc: *c.GCObject = top_of_stack.value.gc;
     const proto = gc.cl.l.p;
 
-    var output = std.ArrayList(u8).init(allocator);
-    errdefer output.deinit();
+    var output = std.ArrayList(u8){};
+    errdefer output.deinit(allocator);
+
+    const Context = struct {
+        array_list: *std.ArrayList(u8),
+        allocator: Allocator,
+    };
+    var ctx = Context{ .array_list = &output, .allocator = allocator };
 
     const strip = true;
     const dump_result = c.luaU_dump(
         L,
         proto,
         luaWriterArrayList,
-        &output,
+        &ctx,
         if (strip) 1 else 0,
     );
     if (dump_result != 0) {
         return error.DumpError;
     }
 
-    return output.toOwnedSlice();
+    return output.toOwnedSlice(allocator);
 }
 
 fn luaWriterArrayList(
@@ -67,11 +73,15 @@ fn luaWriterArrayList(
     p: ?*const anyopaque,
     sz: usize,
     ud: ?*anyopaque,
-) callconv(.C) c_int {
+) callconv(.c) c_int {
     _ = L;
-    var array_list: *std.ArrayList(u8) = @ptrCast(@alignCast(ud.?));
+    const Context = struct {
+        array_list: *std.ArrayList(u8),
+        allocator: Allocator,
+    };
+    const ctx: *Context = @ptrCast(@alignCast(ud.?));
     const slice = @as([*]const u8, @ptrCast(p.?))[0..sz];
-    array_list.appendSlice(slice) catch return 1;
+    ctx.array_list.appendSlice(ctx.allocator, slice) catch return 1;
     return 0;
 }
 

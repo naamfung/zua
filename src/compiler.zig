@@ -71,6 +71,7 @@ pub const Compiler = struct {
         num_active_local_vars: u8 = 0,
         active_local_vars: [max_vars]usize = undefined,
         local_vars: std.ArrayList(LocalVar),
+        allocator: Allocator,
 
         pub const LocalVar = struct {
             name_token: Token,
@@ -277,7 +278,7 @@ pub const Compiler = struct {
         /// Appends a new instruction to the Func's code and returns the
         /// index of the added instruction
         pub fn emitInstruction(self: *Func, instruction: anytype) !usize {
-            try self.code.append(@bitCast(instruction));
+            try self.code.append(self.allocator, @bitCast(instruction));
             return self.pc() - 1;
         }
 
@@ -302,7 +303,7 @@ pub const Compiler = struct {
             } else {
                 const index = self.constants.items.len;
                 result.value_ptr.* = index;
-                try self.constants.append(constant);
+                try self.constants.append(self.allocator, constant);
 
                 if (index > Instruction.ABx.max_bx) {
                     // TODO: "constant table overflow"
@@ -322,7 +323,7 @@ pub const Compiler = struct {
         }
 
         pub fn registerlocalvar(self: *Func, name_token: Token) Error!usize {
-            try self.local_vars.append(.{
+            try self.local_vars.append(self.allocator, .{
                 .name_token = name_token,
                 // to be filled in later
                 .active_instruction_index = undefined,
@@ -748,12 +749,13 @@ pub const Compiler = struct {
     pub fn genChunk(self: *Compiler, chunk: *Node.Chunk) Error!*Func {
         const main_func: *Func = try self.arena.create(Func);
         main_func.* = .{
-            .code = std.ArrayList(Instruction).init(self.arena),
-            .constants = std.ArrayList(Constant).init(self.arena),
+            .code = std.ArrayList(Instruction){},
+            .constants = std.ArrayList(Constant){},
             .constants_map = Constant.Map.init(self.arena),
-            .local_vars = std.ArrayList(Func.LocalVar).init(self.arena),
+            .local_vars = std.ArrayList(Func.LocalVar){},
             .varargs = .{ .is_var_arg = true }, // main func is always vararg
             .prev = null,
+            .allocator = self.arena,
         };
 
         self.func = main_func;
@@ -781,18 +783,18 @@ pub const Compiler = struct {
     pub fn genNode(self: *Compiler, node: *Node) Error!void {
         switch (node.id) {
             .chunk => unreachable, // should call genChunk directly, it should always be the root of a tree
-            .call => try self.genCall(@fieldParentPtr(Node.Call, "base", node)),
-            .assignment_statement => try self.genAssignmentStatement(@fieldParentPtr(Node.AssignmentStatement, "base", node)),
-            .literal => try self.genLiteral(@fieldParentPtr(Node.Literal, "base", node)),
-            .identifier => try self.genIdentifier(@fieldParentPtr(Node.Identifier, "base", node)),
-            .return_statement => try self.genReturnStatement(@fieldParentPtr(Node.ReturnStatement, "base", node)),
-            .field_access => try self.genFieldAccess(@fieldParentPtr(Node.FieldAccess, "base", node)),
-            .index_access => try self.genIndexAccess(@fieldParentPtr(Node.IndexAccess, "base", node)),
-            .table_constructor => try self.genTableConstructor(@fieldParentPtr(Node.TableConstructor, "base", node)),
+            .call => try self.genCall(@as(*Node.Call, @alignCast(@fieldParentPtr("base", node)))),
+            .assignment_statement => try self.genAssignmentStatement(@as(*Node.AssignmentStatement, @alignCast(@fieldParentPtr("base", node)))),
+            .literal => try self.genLiteral(@as(*Node.Literal, @alignCast(@fieldParentPtr("base", node)))),
+            .identifier => try self.genIdentifier(@as(*Node.Identifier, @alignCast(@fieldParentPtr("base", node)))),
+            .return_statement => try self.genReturnStatement(@as(*Node.ReturnStatement, @alignCast(@fieldParentPtr("base", node)))),
+            .field_access => try self.genFieldAccess(@as(*Node.FieldAccess, @alignCast(@fieldParentPtr("base", node)))),
+            .index_access => try self.genIndexAccess(@as(*Node.IndexAccess, @alignCast(@fieldParentPtr("base", node)))),
+            .table_constructor => try self.genTableConstructor(@as(*Node.TableConstructor, @alignCast(@fieldParentPtr("base", node)))),
             .table_field => unreachable, // should never be called outside of genTableConstructor
-            .binary_expression => try self.genBinaryExpression(@fieldParentPtr(Node.BinaryExpression, "base", node)),
-            .grouped_expression => try self.genGroupedExpression(@fieldParentPtr(Node.GroupedExpression, "base", node)),
-            .unary_expression => try self.genUnaryExpression(@fieldParentPtr(Node.UnaryExpression, "base", node)),
+            .binary_expression => try self.genBinaryExpression(@as(*Node.BinaryExpression, @alignCast(@fieldParentPtr("base", node)))),
+            .grouped_expression => try self.genGroupedExpression(@as(*Node.GroupedExpression, @alignCast(@fieldParentPtr("base", node)))),
+            .unary_expression => try self.genUnaryExpression(@as(*Node.UnaryExpression, @alignCast(@fieldParentPtr("base", node)))),
             else => unreachable, // TODO
         }
     }
@@ -844,7 +846,7 @@ pub const Compiler = struct {
                 }
             }
 
-            const field_node = @fieldParentPtr(Node.TableField, "base", field_node_base);
+            const field_node: *Node.TableField = @alignCast(@fieldParentPtr("base", field_node_base));
             try self.genTableField(field_node);
             if (field_node.key == null) {
                 num_array_values += 1;
@@ -902,7 +904,7 @@ pub const Compiler = struct {
         if (assignment_statement.is_local) {
             for (assignment_statement.variables, 0..) |variable_node, i| {
                 // we can be certain that this is an identifier when assigning with the local keyword
-                const identifier_node = @fieldParentPtr(Node.Identifier, "base", variable_node);
+                const identifier_node: *Node.Identifier = @alignCast(@fieldParentPtr("base", variable_node));
                 const name_token = identifier_node.token;
                 try self.func.new_localvar(name_token, i);
             }
@@ -1000,7 +1002,7 @@ pub const Compiler = struct {
         try self.genNode(call.expression);
         var is_self_call = false;
         if (call.expression.id == .field_access) {
-            const field_access_node = @fieldParentPtr(Node.FieldAccess, "base", call.expression);
+            const field_access_node: *Node.FieldAccess = @alignCast(@fieldParentPtr("base", call.expression));
             is_self_call = field_access_node.separator.isChar(':');
         }
         if (!is_self_call) {
@@ -1127,9 +1129,9 @@ fn testCompile(source: [:0]const u8) !void {
 
     try zua.debug.checkcode(&chunk);
 
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
-    defer buf.deinit();
-    try zua.dump.write(chunk, buf.writer());
+    var buf = std.ArrayList(u8){};
+    defer buf.deinit(std.testing.allocator);
+    try zua.dump.write(chunk, buf.writer(std.testing.allocator));
 
     const luacDump = try @import("zuatest").luac.loadAndDumpAlloc(std.testing.allocator, source);
     defer std.testing.allocator.free(luacDump);

@@ -5,7 +5,7 @@ const Instruction = opcodes.Instruction;
 const object = @import("object.zig");
 const Function = object.Function;
 const Constant = object.Constant;
-const native_endian = builtin.cpu.arch.endian();
+const native_endian = builtin.target.cpu.arch.endian();
 
 pub const signature = "\x1BLua";
 pub const luac_version: u8 = 0x51;
@@ -94,15 +94,15 @@ pub fn writeString(string: ?[]const u8, writer: anytype) @TypeOf(writer).Error!v
 }
 
 test "header" {
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
-    defer buf.deinit();
+    var buf = std.ArrayList(u8){};
+    defer buf.deinit(std.testing.allocator);
 
-    try writeHeader(buf.writer());
+    try writeHeader(buf.writer(std.testing.allocator));
 }
 
 test "just return" {
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
-    defer buf.deinit();
+    var buf = std.ArrayList(u8){};
+    defer buf.deinit(std.testing.allocator);
 
     const chunk = Function{
         .name = "",
@@ -113,12 +113,12 @@ test "just return" {
         .max_stack_size = 0,
     };
 
-    try write(chunk, buf.writer());
+    try write(chunk, buf.writer(std.testing.allocator));
 }
 
 test "hello world" {
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
-    defer buf.deinit();
+    var buf = std.ArrayList(u8){};
+    defer buf.deinit(std.testing.allocator);
 
     const chunk = Function{
         .allocator = null,
@@ -136,12 +136,12 @@ test "hello world" {
         .max_stack_size = 2,
     };
 
-    try write(chunk, buf.writer());
+    try write(chunk, buf.writer(std.testing.allocator));
 }
 
 test "constants" {
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
-    defer buf.deinit();
+    var buf = std.ArrayList(u8){};
+    defer buf.deinit(std.testing.allocator);
 
     const chunk = Function{
         .allocator = null,
@@ -160,6 +160,6 @@ test "constants" {
         .max_stack_size = 0,
     };
 
-    try write(chunk, buf.writer());
+    try write(chunk, buf.writer(std.testing.allocator));
     //std.debug.print("{e}\n", .{buf.items});
 }

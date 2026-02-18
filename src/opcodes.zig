@@ -81,11 +81,13 @@ pub const OpCode = enum(u6) {
 
     // A mapping of OpCode -> OpMode
     const op_modes = blk: {
-        const max_fields = std.math.maxInt(@typeInfo(OpCode).Enum.tag_type);
+        const tag_type = @typeInfo(OpCode).@"enum".tag_type;
+        const max_fields = std.math.maxInt(tag_type);
         var array: [max_fields]OpMode = undefined;
-        for (@typeInfo(OpCode).Enum.fields) |field| {
+        const fields = @typeInfo(OpCode).@"enum".fields;
+        for (fields) |field| {
             const Type = @field(OpCode, field.name).InstructionType();
-            const mode: OpMode = switch (@typeInfo(Type).Struct.fields[0].type) {
+            const mode: OpMode = switch (@typeInfo(Type).@"struct".fields[0].type) {
                 Instruction.ABC => .iABC,
                 Instruction.ABx => .iABx,
                 Instruction.AsBx => .iAsBx,
@@ -115,9 +117,11 @@ pub const OpCode = enum(u6) {
     };
 
     const op_meta = blk: {
-        const max_fields = std.math.maxInt(@typeInfo(OpCode).Enum.tag_type);
+        const tag_type = @typeInfo(OpCode).@"enum".tag_type;
+        const max_fields = std.math.maxInt(tag_type);
         var array: [max_fields]*const OpMeta = undefined;
-        for (@typeInfo(OpCode).Enum.fields) |field| {
+        const fields = @typeInfo(OpCode).@"enum".fields;
+        for (fields) |field| {
             const Type = @field(OpCode, field.name).InstructionType();
             const meta = &@field(Type, "meta");
             array[field.value] = meta;

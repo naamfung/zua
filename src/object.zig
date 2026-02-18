@@ -185,17 +185,19 @@ pub const Constant = union(Constant.Type) {
             _ = self;
             switch (constant) {
                 .boolean => |val| {
-                    const autoHashFn = std.hash_map.getAutoHashFn(@TypeOf(val), void);
-                    return autoHashFn({}, val);
+                    var hasher = std.hash.Wyhash.init(0);
+                    std.hash.autoHash(&hasher, val);
+                    return hasher.final();
                 },
                 .number => |val| {
-                    const floatBits = @typeInfo(@TypeOf(val)).Float.bits;
+                    var hasher = std.hash.Wyhash.init(0);
+                    const floatBits = @typeInfo(@TypeOf(val)).@"float".bits;
                     const hashType = std.meta.Int(.unsigned, floatBits);
-                    const autoHashFn = std.hash_map.getAutoHashFn(hashType, void);
-                    return autoHashFn({}, @bitCast(val));
+                    std.hash.autoHash(&hasher, @as(hashType, @bitCast(val)));
+                    return hasher.final();
                 },
                 .string => |val| {
-                    return std.hash_map.hashString(val);
+                    return std.hash.Wyhash.hash(0, val);
                 },
                 .nil => {
                     return 0;

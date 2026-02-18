@@ -80,7 +80,7 @@ pub const Token = struct {
         .{ "until", .keyword_until },
         .{ "while", .keyword_while },
     };
-    pub const keywords = std.ComptimeStringMap(Id, keywordMapping);
+    pub const keywords = std.static_string_map.StaticStringMap(Id).initComptime(keywordMapping);
 
     pub const Id = enum {
         // terminal symbols denoted by reserved words
@@ -229,11 +229,11 @@ pub const LexErrorContext = struct {
     err: LexError,
 
     pub fn renderAlloc(self: *LexErrorContext, allocator: Allocator, lexer: *Lexer) ![]const u8 {
-        var buffer = std.ArrayList(u8).init(allocator);
-        errdefer buffer.deinit();
+        var buffer = std.ArrayList(u8){};
+        errdefer buffer.deinit(allocator);
 
         const looked_up_msg = lex_error_strings.get(self.err).?;
-        const error_writer = buffer.writer();
+        const error_writer = buffer.writer(allocator);
         const MAXSRC = 80; // see MAXSRC in llex.c
         var chunk_id_buf: [MAXSRC]u8 = undefined;
         const chunk_id = zua.object.getChunkId(lexer.chunk_name, &chunk_id_buf);
@@ -242,7 +242,7 @@ pub const LexErrorContext = struct {
         if (self.err != LexError.ChunkHasTooManyLines and self.err != LexError.LexicalElementTooLong) {
             try error_writer.print(" near '{s}'", .{self.token.nameForErrorDisplay(lexer.buffer)});
         }
-        return buffer.toOwnedSlice();
+        return buffer.toOwnedSlice(allocator);
     }
 };
 

@@ -39,24 +39,26 @@ pub const Table = struct {
                 _ = self;
                 switch (key) {
                     .boolean => |val| {
-                        const autoHashFn = std.array_hash_map.getAutoHashFn(@TypeOf(val), void);
-                        return autoHashFn({}, val);
+                        var hasher = std.hash.Wyhash.init(0);
+                        std.hash.autoHash(&hasher, val);
+                        return @truncate(hasher.final());
                     },
                     .number => |val| {
-                        const floatBits = @typeInfo(@TypeOf(val)).Float.bits;
+                        var hasher = std.hash.Wyhash.init(0);
+                        const floatBits = @typeInfo(@TypeOf(val)).@"float".bits;
                         const hashType = std.meta.Int(.unsigned, floatBits);
-                        const autoHashFn = std.array_hash_map.getAutoHashFn(hashType, void);
-                        return autoHashFn({}, @bitCast(val));
+                        std.hash.autoHash(&hasher, @as(hashType, @bitCast(val)));
+                        return @truncate(hasher.final());
                     },
                     .string, .table, .function, .userdata, .thread => {
                         // TODO
-                        //const ptrHashFn = std.hash_map.getHashPtrAddrFn(*object.GCObject);
-                        //return ptrHashFn(val);
+                        // Use pointer address hash for GC objects
                         return 0;
                     },
                     .light_userdata => |val| {
-                        const ptrHashFn = std.array_hash_map.getHashPtrAddrFn(@TypeOf(val), void);
-                        return ptrHashFn({}, val);
+                        // Hash the pointer address
+                        const addr = @intFromPtr(val);
+                        return @truncate(addr ^ (addr >> 32));
                     },
                     .nil => {
                         // TODO: nil key will lead to a 'table index is nil' error
@@ -69,13 +71,24 @@ pub const Table = struct {
 
             pub fn eql(self: @This(), a: Value, b: Value, b_index: usize) bool {
                 _ = self;
+                _ = b_index;
                 if (a.getType() != b.getType()) {
                     return false;
                 }
 
-                // TODO: type-specific eql
-                const autoEqlFn = std.array_hash_map.getAutoEqlFn(Value, void);
-                return autoEqlFn({}, a, b, b_index);
+                // Type-specific equality check
+                return switch (a) {
+                    .boolean => |val| val == b.boolean,
+                    .number => |val| val == b.number,
+                    .string => |val| val == b.string,
+                    .table => |val| val == b.table,
+                    .function => |val| val == b.function,
+                    .userdata => |val| val == b.userdata,
+                    .thread => |val| val == b.thread,
+                    .light_userdata => |val| val == b.light_userdata,
+                    .nil => true,
+                    .none => unreachable,
+                };
             }
         };
     };
@@ -87,7 +100,7 @@ pub const Table = struct {
 
     pub fn initCapacity(allocator: Allocator, narray: usize, nhash: usize) !Table {
         var self = Table{
-            .array = ArrayPortion.init(allocator),
+            .array = ArrayPortion{},
             .map = MapPortion.HashMap.init(allocator),
             .allocator = allocator,
         };
@@ -95,7 +108,7 @@ pub const Table = struct {
         if (narray > 0) {
             // this is kinda weird, but it more closely matches how Lua expects things
             // to work
-            try self.array.appendNTimes(Value.nil, narray);
+            try self.array.appendNTimes(allocator, Value.nil, narray);
         }
         if (nhash > 0) {
             try self.map.ensureTotalCapacity(nhash);
@@ -104,7 +117,7 @@ pub const Table = struct {
     }
 
     pub fn deinit(self: *Table) void {
-        self.array.deinit();
+        self.array.deinit(self.allocator);
         self.map.deinit();
     }
 
