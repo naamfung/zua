@@ -304,6 +304,13 @@ pub const Compiler = struct {
             return self.emitInstruction(Instruction.ABx.init(op, a, bx));
         }
 
+        /// Appends a new instruction with signed Bx to the Func's code and returns the
+        /// index of the added instruction
+        /// luaK_codeAsBx equivalent (for jmp, forloop, forprep)
+        pub fn emitAsBx(self: *Func, op: OpCode, a: u8, sbx: i18) !usize {
+            return self.emitInstruction(Instruction.AsBx.init(op, a, sbx));
+        }
+
         pub fn putConstant(self: *Func, constant: Constant) Error!u18 {
             const result = try self.constants_map.getOrPut(constant);
             if (result.found_existing) {
@@ -808,7 +815,16 @@ pub const Compiler = struct {
             .binary_expression => try self.genBinaryExpression(@as(*Node.BinaryExpression, @alignCast(@fieldParentPtr("base", node)))),
             .grouped_expression => try self.genGroupedExpression(@as(*Node.GroupedExpression, @alignCast(@fieldParentPtr("base", node)))),
             .unary_expression => try self.genUnaryExpression(@as(*Node.UnaryExpression, @alignCast(@fieldParentPtr("base", node)))),
-            else => unreachable, // TODO
+            // Control flow statements
+            .if_statement => try self.genIfStatement(@as(*Node.IfStatement, @alignCast(@fieldParentPtr("base", node)))),
+            .if_clause => unreachable, // should never be called outside of genIfStatement
+            .while_statement => try self.genWhileStatement(@as(*Node.WhileStatement, @alignCast(@fieldParentPtr("base", node)))),
+            .do_statement => try self.genDoStatement(@as(*Node.DoStatement, @alignCast(@fieldParentPtr("base", node)))),
+            .repeat_statement => try self.genRepeatStatement(@as(*Node.RepeatStatement, @alignCast(@fieldParentPtr("base", node)))),
+            .break_statement => try self.genBreakStatement(@as(*Node.BreakStatement, @alignCast(@fieldParentPtr("base", node)))),
+            .for_statement_numeric => try self.genForStatementNumeric(@as(*Node.ForStatementNumeric, @alignCast(@fieldParentPtr("base", node)))),
+            .for_statement_generic => try self.genForStatementGeneric(@as(*Node.ForStatementGeneric, @alignCast(@fieldParentPtr("base", node)))),
+            .function_declaration => try self.genFunctionDeclaration(@as(*Node.FunctionDeclaration, @alignCast(@fieldParentPtr("base", node)))),
         }
     }
 
@@ -1133,6 +1149,368 @@ pub const Compiler = struct {
             final_constant = Constant{ .string = dupe };
         }
         return self.func.putConstant(final_constant);
+    }
+
+    // =============================================================================
+    // Control Flow Statements
+    // =============================================================================
+
+    /// Break list for tracking break statements in loops
+    const BreakList = struct {
+        jumps: std.ArrayList(usize),
+        
+        pub fn init(allocator: Allocator) BreakList {
+            _ = allocator;
+            return .{ .jumps = std.ArrayList(usize){} };
+        }
+        
+        pub fn deinit(self: *BreakList, allocator: Allocator) void {
+            self.jumps.deinit(allocator);
+        }
+        
+        pub fn add(self: *BreakList, allocator: Allocator, pc: usize) !void {
+            try self.jumps.append(allocator, pc);
+        }
+    };
+    
+    var current_break_list: ?*BreakList = null;
+
+    pub fn genIfStatement(self: *Compiler, if_statement: *Node.IfStatement) Error!void {
+        // Track escape points for all branches
+        var escape_jumps = std.ArrayList(usize){};
+        defer escape_jumps.deinit(self.arena);
+        
+        for (if_statement.clauses, 0..) |clause_node, i| {
+            const clause: *Node.IfClause = @alignCast(@fieldParentPtr("base", clause_node));
+            
+            if (clause.condition) |condition| {
+                // This is an if or elseif clause with a condition
+                try self.genNode(condition);
+                _ = try self.func.exp2nextreg(&self.func.cur_exp);
+                
+                // Emit test instruction
+                _ = try self.func.emitABC(.@"test", 0, 0, 0);
+                // Jump to next clause if condition is false
+                const jmp_pc = try self.func.emitAsBx(.jmp, 0, 0);
+                
+                // Generate body
+                for (clause.body) |body_node| {
+                    try self.genNode(body_node);
+                }
+                
+                // Jump to end after this branch (unless it's the last else clause)
+                if (i < if_statement.clauses.len - 1) {
+                    const escape_pc = try self.func.emitAsBx(.jmp, 0, 0);
+                    try escape_jumps.append(self.arena, escape_pc);
+                }
+                
+                // Patch the condition jump to skip to next clause
+                const patch_inst: *Instruction.AsBx = @ptrCast(&self.func.code.items[jmp_pc]);
+                patch_inst.setSignedBx(@intCast(self.func.pc() - jmp_pc - 1));
+            } else {
+                // This is an else clause (no condition)
+                for (clause.body) |body_node| {
+                    try self.genNode(body_node);
+                }
+            }
+        }
+        
+        // Patch all escape jumps to point here (after the if statement)
+        for (escape_jumps.items) |escape_pc| {
+            const patch_inst: *Instruction.AsBx = @ptrCast(&self.func.code.items[escape_pc]);
+            patch_inst.setSignedBx(@intCast(self.func.pc() - escape_pc - 1));
+        }
+    }
+
+    pub fn genWhileStatement(self: *Compiler, while_statement: *Node.WhileStatement) Error!void {
+        // Save the start of the loop for jumps back
+        const loop_start_pc = self.func.pc();
+        
+        // Generate condition
+        try self.genNode(while_statement.condition);
+        _ = try self.func.exp2nextreg(&self.func.cur_exp);
+        
+        // Emit test and jump to end if false
+        _ = try self.func.emitABC(.@"test", 0, 0, 0);
+        const end_jmp_pc = try self.func.emitAsBx(.jmp, 0, 0);
+        
+        // Set up break list
+        var break_list = BreakList.init(self.arena);
+        defer break_list.deinit(self.arena);
+        const prev_break_list = current_break_list;
+        current_break_list = &break_list;
+        
+        // Generate body
+        for (while_statement.body) |body_node| {
+            try self.genNode(body_node);
+        }
+        
+        // Jump back to loop start
+        const back_jmp_pc = try self.func.emitAsBx(.jmp, 0, @intCast(loop_start_pc - self.func.pc() - 1));
+        _ = back_jmp_pc;
+        
+        // Restore previous break list
+        current_break_list = prev_break_list;
+        
+        // Patch end jump
+        const end_patch: *Instruction.AsBx = @ptrCast(&self.func.code.items[end_jmp_pc]);
+        end_patch.setSignedBx(@intCast(self.func.pc() - end_jmp_pc - 1));
+        
+        // Patch break jumps
+        for (break_list.jumps.items) |break_pc| {
+            const break_patch: *Instruction.AsBx = @ptrCast(&self.func.code.items[break_pc]);
+            break_patch.setSignedBx(@intCast(self.func.pc() - break_pc - 1));
+        }
+    }
+
+    pub fn genDoStatement(self: *Compiler, do_statement: *Node.DoStatement) Error!void {
+        // Simply generate the body
+        for (do_statement.body) |body_node| {
+            try self.genNode(body_node);
+        }
+    }
+
+    pub fn genRepeatStatement(self: *Compiler, repeat_statement: *Node.RepeatStatement) Error!void {
+        // Save the start of the loop
+        const loop_start_pc = self.func.pc();
+        
+        // Set up break list
+        var break_list = BreakList.init(self.arena);
+        defer break_list.deinit(self.arena);
+        const prev_break_list = current_break_list;
+        current_break_list = &break_list;
+        
+        // Generate body
+        for (repeat_statement.body) |body_node| {
+            try self.genNode(body_node);
+        }
+        
+        // Generate condition
+        try self.genNode(repeat_statement.condition);
+        _ = try self.func.exp2nextreg(&self.func.cur_exp);
+        
+        // Test and jump back if condition is false
+        _ = try self.func.emitABC(.@"test", 0, 0, 1); // jump if true (condition met, exit)
+        const back_jmp_pc = try self.func.emitAsBx(.jmp, 0, @intCast(loop_start_pc - self.func.pc() - 1));
+        _ = back_jmp_pc;
+        
+        // Restore previous break list
+        current_break_list = prev_break_list;
+        
+        // Patch break jumps
+        for (break_list.jumps.items) |break_pc| {
+            const break_patch: *Instruction.AsBx = @ptrCast(&self.func.code.items[break_pc]);
+            break_patch.setSignedBx(@intCast(self.func.pc() - break_pc - 1));
+        }
+    }
+
+    pub fn genBreakStatement(self: *Compiler, break_statement: *Node.BreakStatement) Error!void {
+        _ = break_statement;
+        
+        if (current_break_list) |break_list| {
+            // Emit jump instruction and add to break list
+            const break_pc = try self.func.emitAsBx(.jmp, 0, 0);
+            try break_list.add(self.arena, break_pc);
+        } else {
+            return error.CompileError; // break outside of loop
+        }
+    }
+
+    pub fn genForStatementNumeric(self: *Compiler, for_statement: *Node.ForStatementNumeric) Error!void {
+        // Reserve registers for loop control: index, limit, step, loop_var
+        const base_reg = self.func.free_register;
+        try self.func.reserveregs(4);
+        
+        // Generate start value
+        try self.genNode(for_statement.start);
+        _ = try self.func.exp2nextreg(&self.func.cur_exp);
+        
+        // Generate limit value
+        try self.genNode(for_statement.end);
+        _ = try self.func.exp2nextreg(&self.func.cur_exp);
+        
+        // Generate step value (default to 1 if not provided)
+        if (for_statement.increment) |increment| {
+            try self.genNode(increment);
+        } else {
+            self.func.cur_exp = .{ .desc = .{ .number = 1.0 } };
+        }
+        _ = try self.func.exp2nextreg(&self.func.cur_exp);
+        
+        // Emit forprep instruction
+        const prep_pc = try self.func.emitAsBx(.forprep, base_reg, 0);
+        
+        // Set up break list
+        var break_list = BreakList.init(self.arena);
+        defer break_list.deinit(self.arena);
+        const prev_break_list = current_break_list;
+        current_break_list = &break_list;
+        
+        // The loop variable is in base_reg + 3
+        // Store the loop variable name for debugging
+        const name_token = for_statement.name;
+        try self.func.new_localvar(name_token, 0);
+        self.func.active_local_vars[self.func.num_active_local_vars] = @intCast(base_reg + 3);
+        self.func.num_active_local_vars += 1;
+        
+        // Generate body
+        for (for_statement.body) |body_node| {
+            try self.genNode(body_node);
+        }
+        
+        // Emit forloop instruction
+        _ = try self.func.emitAsBx(.forloop, base_reg, 0);
+        
+        // Patch forprep to jump to body
+        const prep_patch: *Instruction.AsBx = @ptrCast(&self.func.code.items[prep_pc]);
+        prep_patch.setSignedBx(@intCast(prep_pc + 1 - prep_pc - 1)); // Will be patched by forloop
+        
+        // Restore previous break list
+        current_break_list = prev_break_list;
+        
+        // Remove loop variable
+        self.func.num_active_local_vars -= 1;
+        
+        // Patch break jumps
+        for (break_list.jumps.items) |break_pc| {
+            const break_patch: *Instruction.AsBx = @ptrCast(&self.func.code.items[break_pc]);
+            break_patch.setSignedBx(@intCast(self.func.pc() - break_pc - 1));
+        }
+        
+        self.func.free_register = base_reg;
+    }
+
+    pub fn genForStatementGeneric(self: *Compiler, for_statement: *Node.ForStatementGeneric) Error!void {
+        // Reserve registers for iterator: state, control, generator, then loop vars
+        const num_vars = for_statement.names.len;
+        const base_reg = self.func.free_register;
+        try self.func.reserveregs(@intCast(3 + num_vars));
+        
+        // Generate expressions (iterator function, state, initial value)
+        for (for_statement.expressions) |expr| {
+            try self.genNode(expr);
+            _ = try self.func.exp2nextreg(&self.func.cur_exp);
+        }
+        
+        // Fill remaining with nil if less than 3 expressions
+        while (self.func.free_register < base_reg + 3) {
+            self.func.cur_exp = .{ .desc = .{ .nil = {} } };
+            _ = try self.func.exp2nextreg(&self.func.cur_exp);
+        }
+        
+        // Emit tforloop instruction
+        const loop_pc = try self.func.emitABC(.tforloop, base_reg, @intCast(num_vars), 0);
+        
+        // Jump after loop if iterator returns nil
+        const end_jmp_pc = try self.func.emitAsBx(.jmp, 0, 0);
+        
+        // Set up break list
+        var break_list = BreakList.init(self.arena);
+        defer break_list.deinit(self.arena);
+        const prev_break_list = current_break_list;
+        current_break_list = &break_list;
+        
+        // Register loop variables
+        for (for_statement.names, 0..) |name_token, i| {
+            try self.func.new_localvar(name_token, i);
+            self.func.active_local_vars[self.func.num_active_local_vars] = @intCast(base_reg + 3 + i);
+            self.func.num_active_local_vars += 1;
+        }
+        
+        // Generate body
+        for (for_statement.body) |body_node| {
+            try self.genNode(body_node);
+        }
+        
+        // Jump back to tforloop
+        _ = try self.func.emitAsBx(.jmp, 0, @intCast(loop_pc - self.func.pc() - 1));
+        
+        // Patch end jump
+        const end_patch: *Instruction.AsBx = @ptrCast(&self.func.code.items[end_jmp_pc]);
+        end_patch.setSignedBx(@intCast(self.func.pc() - end_jmp_pc - 1));
+        
+        // Restore previous break list
+        current_break_list = prev_break_list;
+        
+        // Remove loop variables
+        self.func.num_active_local_vars -= @intCast(num_vars);
+        
+        // Patch break jumps
+        for (break_list.jumps.items) |break_pc| {
+            const break_patch: *Instruction.AsBx = @ptrCast(&self.func.code.items[break_pc]);
+            break_patch.setSignedBx(@intCast(self.func.pc() - break_pc - 1));
+        }
+        
+        self.func.free_register = base_reg;
+    }
+
+    pub fn genFunctionDeclaration(self: *Compiler, func_decl: *Node.FunctionDeclaration) Error!void {
+        // Create a new function prototype
+        const child_func: *Func = try self.arena.create(Func);
+        child_func.* = .{
+            .code = std.ArrayList(Instruction){},
+            .constants = std.ArrayList(Constant){},
+            .constants_map = Constant.Map.init(self.arena),
+            .local_vars = std.ArrayList(Func.LocalVar){},
+            .varargs = .{ .is_var_arg = true },
+            .prev = self.func,
+            .allocator = self.arena,
+        };
+        
+        // Save current function state
+        const saved_func = self.func;
+        self.func = child_func;
+        
+        // Register parameters as local variables
+        for (func_decl.parameters, 0..) |param_token, i| {
+            try self.func.new_localvar(param_token, i);
+        }
+        try self.func.adjustlocalvars(func_decl.parameters.len);
+        
+        // Generate function body
+        for (func_decl.body) |body_node| {
+            try self.genNode(body_node);
+        }
+        
+        // Add implicit return at end
+        _ = try self.func.emitReturn(0, 0);
+        
+        // Restore parent function
+        self.func = saved_func;
+        
+        // If function has a name, store it
+        if (func_decl.name) |name_node| {
+            if (func_decl.is_local) {
+                // Local function declaration
+                if (name_node.id == .identifier) {
+                    const identifier: *Node.Identifier = @alignCast(@fieldParentPtr("base", name_node));
+                    try self.func.new_localvar(identifier.token, 0);
+                }
+            }
+            
+            // Create closure and store it
+            const closure_pc = try self.func.emitABx(.closure, self.func.free_register, 0);
+            _ = closure_pc;
+            try self.func.reserveregs(1);
+            
+            if (!func_decl.is_local) {
+                // Global function
+                if (name_node.id == .identifier) {
+                    const identifier: *Node.Identifier = @alignCast(@fieldParentPtr("base", name_node));
+                    const name = self.source[identifier.token.start..identifier.token.end];
+                    const index = try self.putConstant(Constant{ .string = name });
+                    self.func.cur_exp = .{ .desc = .{ .nonreloc = .{ .result_register = self.func.free_register - 1 } } };
+                    _ = try self.func.emitInstruction(Instruction.SetGlobal.init(index, self.func.free_register - 1));
+                }
+            } else {
+                try self.func.adjustlocalvars(1);
+            }
+        } else {
+            // Anonymous function - leave closure on stack
+            _ = try self.func.emitABx(.closure, self.func.free_register, 0);
+            self.func.cur_exp = .{ .desc = .{ .nonreloc = .{ .result_register = self.func.free_register } } };
+            try self.func.reserveregs(1);
+        }
     }
 };
 
