@@ -544,7 +544,7 @@ pub const LuaState = struct {
                         .nil => Value.nil,
                         .boolean => |b| .{ .boolean = b },
                         .number => |n| .{ .number = n },
-                        .string => |s| .{ .string = try String.init(self.allocator, s) },
+                        .string => |s| .{ .string = try self.internString(s) },
                     };
                 },
                 .loadbool => {
@@ -569,7 +569,7 @@ pub const LuaState = struct {
                     const bx = abx.bx;
                     const name_const = constants[bx];
                     if (name_const == .string) {
-                        const name_str = try String.init(self.allocator, name_const.string);
+                        const name_str = try self.internString(name_const.string);
                         const value = self.globals.get(.{ .string = name_str });
                         self.stack[base + a] = value;
                     }
@@ -580,7 +580,7 @@ pub const LuaState = struct {
                     const bx = abx.bx;
                     const name_const = constants[bx];
                     if (name_const == .string) {
-                        const name_str = try String.init(self.allocator, name_const.string);
+                        const name_str = try self.internString(name_const.string);
                         try self.globals.set(.{ .string = name_str }, self.stack[base + a]);
                     }
                 },
