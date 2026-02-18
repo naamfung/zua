@@ -370,6 +370,19 @@ pub const LuaState = struct {
         return error.RuntimeError;
     }
 
+    // Insert a value at a specific position in the stack
+    pub fn insert(self: *Self, idx: i32) !void {
+        const pos: usize = if (idx > 0) @intCast(idx - 1) else self.top - @as(usize, @intCast(-idx));
+        if (pos >= self.top) return;
+        
+        const val = self.stack[self.top - 1];
+        var i: usize = self.top - 1;
+        while (i > pos) : (i -= 1) {
+            self.stack[i] = self.stack[i - 1];
+        }
+        self.stack[pos] = val;
+    }
+
     // Load a chunk from source
     pub fn load(self: *Self, source: []const u8, name: []const u8) !void {
         const func = try zua.compiler.compile(self.allocator, source);
