@@ -770,12 +770,12 @@ fn string_find(L: *LuaState) callconv(.c) i32 {
         0;
 
     if (std.mem.indexOfPos(u8, s, start_idx, pattern)) |idx| {
-        L.pushNumber(@floatFromInt(idx + 1));
-        L.pushNumber(@floatFromInt(idx + pattern.len));
+        L.pushNumber(@floatFromInt(idx + 1)) catch return 0;
+        L.pushNumber(@floatFromInt(idx + pattern.len)) catch return 0;
         return 2;
     }
 
-    L.pushNil();
+    L.pushNil() catch return 0;
     return 1;
 }
 
