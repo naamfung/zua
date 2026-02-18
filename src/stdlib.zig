@@ -397,15 +397,15 @@ fn base_loadfile(L: *LuaState) callconv(.c) i32 {
     defer file.close();
 
     const source = file.readToEndAlloc(L.allocator, 1024 * 1024) catch {
-        L.pushNil();
-        L.pushString("error reading file") catch {};
+        L.pushNil() catch return 0;
+        L.pushString("error reading file") catch return 0;
         return 2;
     };
     defer L.allocator.free(source);
 
     L.load(source, filename) catch {
-        L.pushNil();
-        L.pushString("error loading file") catch {};
+        L.pushNil() catch return 0;
+        L.pushString("error loading file") catch return 0;
         return 2;
     };
 
