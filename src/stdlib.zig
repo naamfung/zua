@@ -979,14 +979,14 @@ fn math_min(L: *LuaState) callconv(.c) i32 {
         if (val < min) min = val;
     }
 
-    L.pushNumber(min);
+    L.pushNumber(min) catch return 0;
     return 1;
 }
 
 fn math_max(L: *LuaState) callconv(.c) i32 {
     const n = L.getTop();
     if (n == 0) {
-        L.pushNumber(0);
+        L.pushNumber(0) catch return 0;
         return 1;
     }
 
@@ -997,13 +997,13 @@ fn math_max(L: *LuaState) callconv(.c) i32 {
         if (val > max) max = val;
     }
 
-    L.pushNumber(max);
+    L.pushNumber(max) catch return 0;
     return 1;
 }
 
 fn math_sin(L: *LuaState) callconv(.c) i32 {
     const n = L.toNumber(1) orelse 0;
-    L.pushNumber(std.math.sin(n));
+    L.pushNumber(std.math.sin(n)) catch return 0;
     return 1;
 }
 
