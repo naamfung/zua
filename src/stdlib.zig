@@ -849,7 +849,7 @@ fn string_byte(L: *LuaState) callconv(.c) i32 {
     var i: i32 = start;
     while (i <= end and i <= len) : (i += 1) {
         if (i >= 1) {
-            L.pushNumber(@as(f64, @floatFromInt(s[@intCast(i - 1)])));
+            L.pushNumber(@as(f64, @floatFromInt(s[@intCast(i - 1)]))) catch return 0;
             count += 1;
         }
     }
@@ -859,7 +859,8 @@ fn string_byte(L: *LuaState) callconv(.c) i32 {
 
 fn string_char(L: *LuaState) callconv(.c) i32 {
     const n = L.getTop();
-    var result = std.ArrayList(u8).init(L.allocator);
+    var result = std.ArrayList(u8){};
+    result.* = std.ArrayList(u8).init(L.allocator);
 
     var i: i32 = 1;
     while (i <= n) : (i += 1) {
@@ -868,7 +869,7 @@ fn string_char(L: *LuaState) callconv(.c) i32 {
     }
 
     const str = result.toOwnedSlice() catch "";
-    L.pushString(str) catch {};
+    L.pushString(str) catch return 0;
     L.allocator.free(str);
     return 1;
 }
