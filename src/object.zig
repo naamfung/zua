@@ -7,7 +7,7 @@ const Allocator = std.mem.Allocator;
 // Forward Declarations
 // =============================================================================
 
-pub const LuaState = opaque {};
+pub const LuaState = @import("vm.zig").LuaState;
 
 // =============================================================================
 // GC Object Header
