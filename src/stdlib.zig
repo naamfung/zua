@@ -192,17 +192,28 @@ fn base_tonumber(L: *LuaState) callconv(.C) i32 {
 }
 
 fn base_error(L: *LuaState) callconv(.C) i32 {
-    _ = L;
-    // TODO: Proper error handling
-    return 0;
+    const n = L.getTop();
+    if (n > 0) {
+        const val = L.toValue(1);
+        L.pushValue(val) catch return 0;
+    } else {
+        L.pushString("error") catch return 0;
+    }
+    return 1;
 }
 
 fn base_assert(L: *LuaState) callconv(.C) i32 {
     if (L.toBoolean(1)) {
         return L.getTop();
     }
-    // TODO: error
-    return 0;
+    
+    if (L.getTop() >= 2) {
+        const val = L.toValue(2);
+        L.pushValue(val) catch return 0;
+    } else {
+        L.pushString("assertion failed!") catch return 0;
+    }
+    return 1;
 }
 
 fn base_pairs(L: *LuaState) callconv(.C) i32 {
@@ -339,15 +350,26 @@ fn base_rawequal(L: *LuaState) callconv(.C) i32 {
 }
 
 fn base_setfenv(L: *LuaState) callconv(.C) i32 {
-    _ = L;
-    // TODO
-    return 0;
+    const n = L.getTop();
+    if (n < 1) return 0;
+    
+    // TODO: Implement proper fenv handling
+    // For now, just return the argument
+    L.pushValue(L.toValue(1)) catch return 0;
+    return 1;
 }
 
 fn base_getfenv(L: *LuaState) callconv(.C) i32 {
-    _ = L;
-    // TODO
-    return 0;
+    const n = L.getTop();
+    if (n == 0) {
+        // Return current environment
+        L.pushValue(.{ .table = L.globals }) catch return 0;
+    } else {
+        // TODO: Implement proper fenv handling
+        // For now, return nil
+        L.pushNil() catch return 0;
+    }
+    return 1;
 }
 
 fn base_loadstring(L: *LuaState) callconv(.C) i32 {
