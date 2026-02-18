@@ -830,7 +830,7 @@ fn string_format(L: *LuaState) callconv(.c) i32 {
     }
 
     const str = result.toOwnedSlice() catch "";
-    L.pushString(str) catch {};
+    L.pushString(str) catch return 0;
     L.allocator.free(str);
     return 1;
 }
