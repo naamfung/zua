@@ -225,8 +225,25 @@ pub const LuaState = struct {
         try self.push(.{ .boolean = b });
     }
 
-    pub fn pushString(self: *Self, s: []const u8) !void {
+    pub fn internString(self: *Self, s: []const u8) !*String {
+        const hash = std.hash.Wyhash.hash(0, s);
+        
+        // Check if string already exists in pool
+        if (self.string_pool.get(hash)) |str| {
+            // Check if content matches (hash collision protection)
+            if (str.len == s.len and std.mem.eql(u8, str.asSlice(), s)) {
+                return str;
+            }
+        }
+        
+        // Create new string and add to pool
         const str = try String.initWithGC(self.allocator, &self.gc, s);
+        try self.string_pool.put(hash, str);
+        return str;
+    }
+
+    pub fn pushString(self: *Self, s: []const u8) !void {
+        const str = try self.internString(s);
         try self.push(.{ .string = str });
     }
 
@@ -243,14 +260,12 @@ pub const LuaState = struct {
 
     pub fn setGlobal(self: *Self, name: []const u8) !void {
         const value = self.pop();
-        const str = try String.init(self.allocator, name);
-        defer str.deinit(self.allocator);
+        const str = try self.internString(name);
         try self.globals.set(.{ .string = str }, value);
     }
 
     pub fn getGlobal(self: *Self, name: []const u8) !void {
-        const str = try String.init(self.allocator, name);
-        defer str.deinit(self.allocator);
+        const str = try self.internString(name);
         const value = self.globals.get(.{ .string = str });
         try self.push(value);
     }
@@ -258,8 +273,7 @@ pub const LuaState = struct {
     pub fn setField(self: *Self, idx: i32, k: []const u8) !void {
         const t = self.toTable(idx) orelse return error.ExpectedTable;
         const v = self.pop();
-        const str = try String.init(self.allocator, k);
-        defer str.deinit(self.allocator);
+        const str = try self.internString(k);
         try t.set(.{ .string = str }, v);
     }
 
@@ -268,8 +282,7 @@ pub const LuaState = struct {
             try self.push(.nil);
             return;
         };
-        const str = try String.init(self.allocator, k);
-        defer str.deinit(self.allocator);
+        const str = try self.internString(k);
         const v = t.get(.{ .string = str });
         try self.push(v);
     }
