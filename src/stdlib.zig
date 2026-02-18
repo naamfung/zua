@@ -746,14 +746,15 @@ fn string_rep(L: *LuaState) callconv(.c) i32 {
     const s = L.toString(1) orelse "";
     const n: usize = @intFromFloat(L.toNumber(2) orelse 0);
 
-    var result = std.ArrayList(u8).init(L.allocator);
+    var result = std.ArrayList(u8){};
+    result.* = std.ArrayList(u8).init(L.allocator);
     var i: usize = 0;
     while (i < n) : (i += 1) {
         result.appendSlice(s) catch {};
     }
 
     const str = result.toOwnedSlice() catch "";
-    L.pushString(str) catch {};
+    L.pushString(str) catch return 0;
     L.allocator.free(str);
     return 1;
 }
