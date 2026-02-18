@@ -105,12 +105,16 @@ test "just return" {
     defer buf.deinit(std.testing.allocator);
 
     const chunk = Function{
+        .gc = .{ .obj_type = .proto },
         .name = "",
         .code = &[_]Instruction{
             @bitCast(Instruction.ABC.init(.@"return", 0, 1, 0)),
         },
         .constants = &[_]Constant{},
+        .protos = &[_]*Function{},
         .max_stack_size = 0,
+        .line_info = &[_]i32{},
+        .source = "",
     };
 
     try write(chunk, buf.writer(std.testing.allocator));
@@ -121,6 +125,7 @@ test "hello world" {
     defer buf.deinit(std.testing.allocator);
 
     const chunk = Function{
+        .gc = .{ .obj_type = .proto },
         .allocator = null,
         .name = "",
         .code = &[_]Instruction{
@@ -133,7 +138,10 @@ test "hello world" {
             Constant{ .string = "print" },
             Constant{ .string = "hello world" },
         },
+        .protos = &[_]*Function{},
         .max_stack_size = 2,
+        .line_info = &[_]i32{},
+        .source = "",
     };
 
     try write(chunk, buf.writer(std.testing.allocator));
@@ -144,6 +152,7 @@ test "constants" {
     defer buf.deinit(std.testing.allocator);
 
     const chunk = Function{
+        .gc = .{ .obj_type = .proto },
         .allocator = null,
         .name = "",
         .code = &[_]Instruction{
@@ -157,7 +166,10 @@ test "constants" {
             Constant.nil,
             Constant{ .number = 123 },
         },
+        .protos = &[_]*Function{},
         .max_stack_size = 0,
+        .line_info = &[_]i32{},
+        .source = "",
     };
 
     try write(chunk, buf.writer(std.testing.allocator));

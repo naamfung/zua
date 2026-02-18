@@ -50,7 +50,7 @@ pub const Table = struct {
                         std.hash.autoHash(&hasher, @as(hashType, @bitCast(val)));
                         return @truncate(hasher.final());
                     },
-                    .string, .table, .function, .userdata, .thread => {
+                    .string, .table, .closure, .c_closure, .userdata, .thread => {
                         // TODO
                         // Use pointer address hash for GC objects
                         return 0;
@@ -72,7 +72,7 @@ pub const Table = struct {
             pub fn eql(self: @This(), a: Value, b: Value, b_index: usize) bool {
                 _ = self;
                 _ = b_index;
-                if (a.getType() != b.getType()) {
+                if (std.meta.activeTag(a) != std.meta.activeTag(b)) {
                     return false;
                 }
 
@@ -82,7 +82,8 @@ pub const Table = struct {
                     .number => |val| val == b.number,
                     .string => |val| val == b.string,
                     .table => |val| val == b.table,
-                    .function => |val| val == b.function,
+                    .closure => |val| val == b.closure,
+                    .c_closure => |val| val == b.c_closure,
                     .userdata => |val| val == b.userdata,
                     .thread => |val| val == b.thread,
                     .light_userdata => |val| val == b.light_userdata,
@@ -350,9 +351,9 @@ pub const Table = struct {
 };
 
 test "arrayIndex" {
-    const nil = Value.nil;
-    var dummyObj = object.GCObject{};
-    const str = Value{ .string = &dummyObj };
+    const nil = Value{ .nil = {} };
+    var dummyObj = object.GCObject{ .obj_type = .string };
+    const str = Value{ .string = @ptrCast(&dummyObj) };
     const valid_num = Value{ .number = 10 };
     const invalid_num = Value{ .number = 5.5 };
 
@@ -379,11 +380,11 @@ test "get" {
 
     // because we pre-allocated the array portion, this will give us nil
     // instead of null
-    try std.testing.expectEqual(Value.nil, tbl.get(Value{ .number = 1 }).?.*);
+    try std.testing.expectEqual(Value{ .nil = {} }, tbl.get(Value{ .number = 1 }).?.*);
 
     // hash map preallocation will still give us null though
-    var dummyObj = object.GCObject{};
-    try std.testing.expect(null == tbl.get(Value{ .string = &dummyObj }));
+    var dummyObj2 = object.GCObject{ .obj_type = .string };
+    try std.testing.expect(null == tbl.get(Value{ .string = @ptrCast(&dummyObj2) }));
 }
 
 test "getn" {
@@ -399,7 +400,7 @@ test "getn" {
     val.* = Value{ .number = 1 };
     try std.testing.expectEqual(@as(usize, 1), tbl.getn());
 
-    val.* = Value.nil;
+    val.* = Value{ .nil = {} };
     try std.testing.expectEqual(@as(usize, 0), tbl.getn());
 }
 
@@ -419,13 +420,13 @@ test "getn quirk 1" {
 
     //   tbl[3] = nil
     const val3 = tbl.get(Value{ .number = 3 }).?;
-    val3.* = Value.nil;
+    val3.* = Value{ .nil = {} };
     //   assert(#tbl == 6)
     try std.testing.expectEqual(@as(usize, 6), tbl.getn());
 
     //   tbl[6] = nil
     const val6 = tbl.get(Value{ .number = 6 }).?;
-    val6.* = Value.nil;
+    val6.* = Value{ .nil = {} };
     //   assert(#tbl == 2)
     try std.testing.expectEqual(@as(usize, 2), tbl.getn());
 }
@@ -442,7 +443,7 @@ test "getn quirk 2" {
     while (i <= 5) : (i += 1) {
         const key = Value{ .number = @floatFromInt(i) };
         const val = try tbl.getOrCreate(key);
-        val.* = if (i != 3) key else Value.nil;
+        val.* = if (i != 3) key else Value{ .nil = {} };
     }
     //   assert(#tbl == 5)
     try std.testing.expectEqual(@as(usize, 5), tbl.getn());
@@ -481,7 +482,7 @@ test "getn quirk 2, next iterator" {
     while (i <= 5) : (i += 1) {
         const key = Value{ .number = @floatFromInt(i) };
         const val = try tbl.getOrCreate(key);
-        val.* = if (i != 3) key else Value.nil;
+        val.* = if (i != 3) key else Value{ .nil = {} };
     }
     // 1-5 except 3
     var expected_iterations: usize = 4;

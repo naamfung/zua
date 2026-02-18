@@ -14,7 +14,7 @@ const Token = zua.lex.Token;
 /// LUAI_MAXVARS from lconf.h
 pub const max_vars = 200;
 
-pub fn compile(allocator: Allocator, source: []const u8) !Function {
+pub fn compile(allocator: Allocator, source: []const u8) !*Function {
     var lexer = Lexer.init(source, source);
     var parser = Parser.init(&lexer);
     var tree = try parser.parse(allocator);
@@ -34,14 +34,22 @@ pub fn compile(allocator: Allocator, source: []const u8) !Function {
 
     const main_func = try compiler.genChunk(tree.chunk());
 
-    return Function{
+    const func_ptr = try allocator.create(Function);
+    func_ptr.* = .{
+        .gc = .{ .obj_type = .proto },
         .name = "",
         .code = try allocator.dupe(Instruction, main_func.code.items),
         .constants = try allocator.dupe(Constant, main_func.constants.items),
+        .protos = &[0]*Function{},
         .allocator = allocator,
         .max_stack_size = main_func.max_stack_size,
+        .num_params = 0,
+        .num_upvalues = 0,
+        .line_info = &[0]i32{},
+        .source = "",
         .varargs = main_func.varargs,
     };
+    return func_ptr;
 }
 
 pub const Compiler = struct {
@@ -1127,11 +1135,11 @@ fn testCompile(source: [:0]const u8) !void {
     var chunk = try compile(std.testing.allocator, source);
     defer chunk.deinit();
 
-    try zua.debug.checkcode(&chunk);
+    try zua.debug.checkcode(chunk);
 
     var buf = std.ArrayList(u8){};
     defer buf.deinit(std.testing.allocator);
-    try zua.dump.write(chunk, buf.writer(std.testing.allocator));
+    try zua.dump.write(chunk.*, buf.writer(std.testing.allocator));
 
     const luacDump = try @import("zuatest").luac.loadAndDumpAlloc(std.testing.allocator, source);
     defer std.testing.allocator.free(luacDump);

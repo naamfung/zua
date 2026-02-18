@@ -20,14 +20,15 @@ const Token = zua.lex.Token;
 // unsigned argument.
 
 pub const OpCode = enum(u6) {
-    // TODO: rest of the opcodes
     move = 0,
     loadk = 1,
     loadbool = 2,
     loadnil = 3,
+    setupval = 4,
     getglobal = 5,
     gettable = 6,
     setglobal = 7,
+    getupval = 8,
     settable = 9,
     newtable = 10,
     self = 11,
@@ -42,11 +43,20 @@ pub const OpCode = enum(u6) {
     len = 20,
     concat = 21,
     jmp = 22,
+    eq = 23,
+    lt = 24,
+    le = 25,
+    @"test" = 26,
+    testset = 27,
     call = 28,
     tailcall = 29,
     @"return" = 30,
+    tforloop = 31,
+    forloop = 32,
+    forprep = 33,
     setlist = 34,
-    vararg = 37,
+    closure = 35,
+    vararg = 36,
 
     pub fn InstructionType(op: OpCode) type {
         return switch (op) {
@@ -54,9 +64,11 @@ pub const OpCode = enum(u6) {
             .loadk => Instruction.LoadK,
             .loadbool => Instruction.LoadBool,
             .loadnil => Instruction.LoadNil,
+            .setupval => Instruction.SetupVal,
             .getglobal => Instruction.GetGlobal,
             .gettable => Instruction.GetTable,
             .setglobal => Instruction.SetGlobal,
+            .getupval => Instruction.GetUpVal,
             .settable => Instruction.SetTable,
             .newtable => Instruction.NewTable,
             .self => Instruction.Self,
@@ -66,9 +78,15 @@ pub const OpCode = enum(u6) {
             .len => Instruction.Length,
             .concat => Instruction.Concat,
             .jmp => Instruction.Jump,
+            .eq, .lt, .le => Instruction.Compare,
+            .@"test" => Instruction.Test,
+            .testset => Instruction.TestSet,
             .call, .tailcall => Instruction.Call,
             .@"return" => Instruction.Return,
+            .tforloop => Instruction.TForLoop,
+            .forloop, .forprep => Instruction.ForLoop,
             .setlist => Instruction.SetList,
+            .closure => Instruction.Closure,
             .vararg => Instruction.VarArg,
         };
     }
@@ -646,19 +664,106 @@ pub const Instruction = packed struct {
         }
 
         pub fn offsetToAbsolute(pc: usize, offset: i18) usize {
-            // As I understand it, the + 1 here is necessary to emulate
-            // the implicit pc++ when evaluating the jmp instruction itself.
-            // That is, if there's bytecode like:
-            //  1 jmp 1
-            //  2 something
-            //  3 something
-            // then the jmp would offset pc by 1, but then it'd get offset
-            // again by the natural movement of the pc after evaluating
-            // any instruction, so we'd actually end up at 3
-            //
-            // TODO better understand why this + 1 exists/verify the above
             return @intCast(@as(isize, @intCast(pc + 1)) + offset);
         }
+    };
+
+    /// if ((RK(B) op RK(C)) ~= A) then pc++
+    /// for eq, lt, le
+    pub const Compare = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .ConstantOrRegisterConstant,
+            .c_mode = .ConstantOrRegisterConstant,
+            .sets_register_in_a = false,
+            .test_t_mode = true,
+        };
+
+        pub fn init(op: OpCode, invert: bool, left_rk: u9, right_rk: u9) Compare {
+            return .{
+                .instruction = Instruction.ABC.init(
+                    op,
+                    @intFromBool(invert),
+                    left_rk,
+                    right_rk,
+                ),
+            };
+        }
+
+        pub fn isInverted(self: *const Compare) bool {
+            return self.instruction.a != 0;
+        }
+    };
+
+    /// if not (R(A) <=> C) then pc++
+    pub const Test = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .NotUsed,
+            .c_mode = .Used,
+            .sets_register_in_a = false,
+            .test_t_mode = true,
+        };
+
+        pub fn init(reg: u8, test_value: bool) Test {
+            return .{
+                .instruction = Instruction.ABC.init(
+                    .@"test",
+                    reg,
+                    0,
+                    @intFromBool(test_value),
+                ),
+            };
+        }
+    };
+
+    /// if (R(B) <=> C) then R(A) := R(B) else pc++
+    pub const TestSet = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .RegisterOrJumpOffset,
+            .c_mode = .Used,
+            .sets_register_in_a = true,
+            .test_t_mode = true,
+        };
+
+        pub fn init(result_reg: u8, test_reg: u9, test_value: bool) TestSet {
+            return .{
+                .instruction = Instruction.ABC.init(
+                    .testset,
+                    result_reg,
+                    test_reg,
+                    @intFromBool(test_value),
+                ),
+            };
+        }
+    };
+
+    /// R(A) := UpValue[B]
+    pub const GetUpVal = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .Used,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+    };
+
+    /// UpValue[B] := R(A)
+    pub const SetupVal = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .Used,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = false,
+            .test_t_mode = false,
+        };
     };
 
     /// Used for both call and tailcall opcodes
@@ -678,9 +783,6 @@ pub const Instruction = packed struct {
             const c_val = if (num_return_values != null) num_return_values.? + 1 else 0;
             return .{
                 .instruction = Instruction.ABC.init(
-                    // TODO: This is always being .call is kinda weird, but it happens to work with
-                    //       how the Lua compiler handles call/tailcall (they all start as call
-                    //       and then get converted to tailcall)
                     .call,
                     result_reg_start,
                     num_params + 1,
@@ -693,7 +795,6 @@ pub const Instruction = packed struct {
             return self.instruction.b - 1;
         }
 
-        // 'base register for call' is what it's called in lparser.c:643
         pub fn setResultRegStart(self: *Call, base_reg: u8) void {
             self.instruction.a = base_reg;
         }
@@ -783,6 +884,31 @@ pub const Instruction = packed struct {
         }
     };
 
+    /// R(A), R(A+1), R(A+2) = R(A+3), R(A+4), R(A+5)
+    /// R(A+4) = R(A+3)[R(A+5)] - iterate
+    pub const TForLoop = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .NotUsed,
+            .c_mode = .Used,
+            .sets_register_in_a = false,
+            .test_t_mode = false,
+        };
+    };
+
+    /// R(A) += R(A+2); if R(A) <?= R(A+1) then pc+=sBx
+    pub const ForLoop = packed struct {
+        instruction: Instruction.AsBx,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .NotUsed,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+    };
+
     /// R(A)[(C-1)*FPF+i] := R(A+i), 1 <= i <= B
     /// if (B == 0) then B = `top'
     /// if (C == 0) then next `instruction' is real C
@@ -798,10 +924,6 @@ pub const Instruction = packed struct {
 
         pub const batch_num_in_next_instruction = 0;
 
-        /// Note: If the resulting SetList's c value is `batch_num_in_next_instruction`
-        /// (or `isBatchNumberStoredInNextInstruction` returns true), then this instruction
-        /// will need an additional instruction after it that contains the full batch number
-        /// (as a bare u32)
         pub fn init(table_reg: u8, num_values: usize, to_store: ?usize) SetList {
             const flush_batch_num: usize = SetList.numValuesToFlushBatchNum(num_values);
             const num_values_in_batch: u9 = if (to_store == null) 0 else @intCast(to_store.?);
@@ -828,6 +950,28 @@ pub const Instruction = packed struct {
 
         /// equivalent to LFIELDS_PER_FLUSH from lopcodes.h
         pub const fields_per_flush = 50;
+    };
+
+    /// R(A) := closure(Kst[Bx])
+    pub const Closure = packed struct {
+        instruction: Instruction.ABx,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .ConstantOrRegisterConstant,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+
+        pub fn init(result_reg: u8, proto_index: u18) Closure {
+            return .{
+                .instruction = Instruction.ABx.init(
+                    .closure,
+                    result_reg,
+                    proto_index,
+                ),
+            };
+        }
     };
 
     /// R(A), R(A+1), ..., R(A+B-1) = vararg
