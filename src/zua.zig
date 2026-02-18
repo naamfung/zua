@@ -40,32 +40,40 @@ pub fn main() !void {
 }
 
 pub fn repl(allocator: std.mem.Allocator) !void {
-    var stdin_buf: [4096]u8 = undefined;
-    var stdout_buf: [4096]u8 = undefined;
-    const stdin_file = std.fs.File.stdin();
-    var stdin_reader = stdin_file.reader(&stdin_buf);
-    const stdout_file = std.fs.File.stdout();
-    var stdout_writer = stdout_file.writer(&stdout_buf);
+    const stdin = std.fs.File.stdin();
+    const stdout = std.fs.File.stdout();
 
-    try stdout_writer.interface.print("Zua 0.1.0 (Lua 5.1 compatible, Zig implementation)\n", .{});
-    try stdout_writer.interface.print("Type 'exit' to quit\n\n", .{});
+    // Write welcome message
+    const welcome = "Zua 0.1.0 (Lua 5.1 compatible, Zig implementation)\n";
+    _ = try stdout.write(welcome);
+    const prompt = "Type 'exit' to quit\n\n";
+    _ = try stdout.write(prompt);
+
+    var buffer: [4096]u8 = undefined;
 
     while (true) {
-        try stdout_writer.interface.print("> ", .{});
+        // Write prompt
+        const prompt_char = "> ";
+        _ = try stdout.write(prompt_char);
 
-        const line = stdin_reader.interface.takeDelimiterExclusive('\n') catch |err| {
-            if (err == error.EndOfStream) break;
-            return err;
-        };
+        // Read line
+        const len = try stdin.read(&buffer);
+        if (len == 0) break;
 
-        if (std.mem.eql(u8, line, "exit") or std.mem.eql(u8, line, "quit")) {
+        const line = buffer[0..len];
+        const trimmed_line = std.mem.trim(u8, line, &std.ascii.whitespace);
+
+        if (std.mem.eql(u8, trimmed_line, "exit") or std.mem.eql(u8, trimmed_line, "quit")) {
             break;
         }
 
-        if (line.len == 0) continue;
+        if (trimmed_line.len == 0) continue;
 
-        executeString(allocator, line) catch |err| {
-            try stdout_writer.interface.print("Error: {}\n", .{err});
+        // Execute code
+        executeString(allocator, trimmed_line) catch |err| {
+            var err_buf: [4096]u8 = undefined;
+            const err_str = std.fmt.bufPrint(&err_buf, "Error: {}\n", .{err}) catch "Error: unknown error\n";
+            _ = try stdout.write(err_str);
         };
     }
 }

@@ -1116,6 +1116,10 @@ pub const LuaState = struct {
                     };
                     try self.executeLua();
                 },
+                .c_closure => {
+                    // Call C closure directly
+                    try self.call(0, 0);
+                },
                 else => {
                     return error.AttemptToCallNonFunction;
                 },
