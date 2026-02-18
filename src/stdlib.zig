@@ -13,75 +13,75 @@ const CClosure = @import("object.zig").CClosure;
 
 pub fn openBase(L: *LuaState) void {
     L.pushCFunction(base_print) catch return;
-    _ = L.setGlobal("print");
+    _ = L.setGlobal("print") catch return;
 
     L.pushCFunction(base_type) catch return;
-    _ = L.setGlobal("type");
+    _ = L.setGlobal("type") catch return;
 
     L.pushCFunction(base_tostring) catch return;
-    _ = L.setGlobal("tostring");
+    _ = L.setGlobal("tostring") catch return;
 
     L.pushCFunction(base_tonumber) catch return;
-    _ = L.setGlobal("tonumber");
+    _ = L.setGlobal("tonumber") catch return;
 
     L.pushCFunction(base_error) catch return;
-    _ = L.setGlobal("error");
+    _ = L.setGlobal("error") catch return;
 
     L.pushCFunction(base_assert) catch return;
-    _ = L.setGlobal("assert");
+    _ = L.setGlobal("assert") catch return;
 
     L.pushCFunction(base_pairs) catch return;
-    _ = L.setGlobal("pairs");
+    _ = L.setGlobal("pairs") catch return;
 
     L.pushCFunction(base_next) catch return;
-    _ = L.setGlobal("next");
+    _ = L.setGlobal("next") catch return;
 
     L.pushCFunction(base_ipairs) catch return;
-    _ = L.setGlobal("ipairs");
+    _ = L.setGlobal("ipairs") catch return;
 
     L.pushCFunction(base_pcall) catch return;
-    _ = L.setGlobal("pcall");
+    _ = L.setGlobal("pcall") catch return;
 
     L.pushCFunction(base_select) catch return;
-    _ = L.setGlobal("select");
+    _ = L.setGlobal("select") catch return;
 
     L.pushCFunction(base_getmetatable) catch return;
-    _ = L.setGlobal("getmetatable");
+    _ = L.setGlobal("getmetatable") catch return;
 
     L.pushCFunction(base_setmetatable) catch return;
-    _ = L.setGlobal("setmetatable");
+    _ = L.setGlobal("setmetatable") catch return;
 
     L.pushCFunction(base_rawget) catch return;
-    _ = L.setGlobal("rawget");
+    _ = L.setGlobal("rawget") catch return;
 
     L.pushCFunction(base_rawset) catch return;
-    _ = L.setGlobal("rawset");
+    _ = L.setGlobal("rawset") catch return;
 
     L.pushCFunction(base_rawequal) catch return;
-    _ = L.setGlobal("rawequal");
+    _ = L.setGlobal("rawequal") catch return;
 
     L.pushCFunction(base_setfenv) catch return;
-    _ = L.setGlobal("setfenv");
+    _ = L.setGlobal("setfenv") catch return;
 
     L.pushCFunction(base_getfenv) catch return;
-    _ = L.setGlobal("getfenv");
+    _ = L.setGlobal("getfenv") catch return;
 
     L.pushCFunction(base_loadstring) catch return;
-    _ = L.setGlobal("loadstring");
+    _ = L.setGlobal("loadstring") catch return;
 
     L.pushCFunction(base_loadfile) catch return;
-    _ = L.setGlobal("loadfile");
+    _ = L.setGlobal("loadfile") catch return;
 
     L.pushCFunction(base_dofile) catch return;
-    _ = L.setGlobal("dofile");
+    _ = L.setGlobal("dofile") catch return;
 
     // Register _G
     L.pushValue(.{ .table = L.globals }) catch return;
-    _ = L.setGlobal("_G");
+    _ = L.setGlobal("_G") catch return;
 
     // Register _VERSION
     L.pushString("Lua 5.1") catch return;
-    _ = L.setGlobal("_VERSION");
+    _ = L.setGlobal("_VERSION") catch return;
 }
 
 fn base_print(L: *LuaState) callconv(.c) i32 {
@@ -455,7 +455,7 @@ pub fn openTable(L: *LuaState) void {
 
 fn table_getn(L: *LuaState) callconv(.c) i32 {
     const t = L.toTable(1) orelse {
-        L.pushNumber(0);
+        L.pushNumber(0) catch return 0;
         return 1;
     };
     L.pushNumber(@floatFromInt(t.length()));
