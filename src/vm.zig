@@ -802,7 +802,7 @@ pub const LuaState = struct {
                     }
                     
                     const items = try result.toOwnedSlice(self.allocator);
-                    const str = try String.init(self.allocator, items);
+                    const str = try self.internString(items);
                     self.allocator.free(items);
                     
                     self.stack[base + a] = .{ .string = str };
