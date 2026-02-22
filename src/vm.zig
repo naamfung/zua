@@ -534,8 +534,8 @@ pub const LuaState = struct {
     fn callC(self: *Self, cclosure: *CClosure, num_args: i32, num_results: i32) !void {
         _ = num_results;
         
-        const old_top = self.top;
-        const func_idx = old_top - @as(usize, @intCast(num_args + 1));
+        // Get function index from call info
+        const func_idx = self.ci.base;
         
         // Shift arguments to the beginning of the stack
         for (0..@intCast(num_args)) |i| {

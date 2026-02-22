@@ -86,15 +86,13 @@ pub fn openBase(L: *LuaState) void {
 
 fn base_print(L: *LuaState) callconv(.c) i32 {
     const n = L.getTop();
-    std.debug.print("base_print called with {d} arguments\n", .{n});
 
     var i: i32 = 1;
     while (i <= n) : (i += 1) {
         if (i > 1) {
-            std.debug.print("\t", .{});
+            std.debug.print(" ", .{});
         }
         const val = L.toValue(i);
-        std.debug.print("{s}: ", .{L.typeName(i)});
         switch (val) {
             .string => |s| {
                 std.debug.print("{s}", .{s.asSlice()});
@@ -108,26 +106,8 @@ fn base_print(L: *LuaState) callconv(.c) i32 {
             .nil => {
                 std.debug.print("nil", .{});
             },
-            .closure => {
-                std.debug.print("closure: {x}", .{@intFromPtr(val.closure)});
-            },
-            .c_closure => {
-                std.debug.print("c_closure: {x}", .{@intFromPtr(val.c_closure)});
-            },
-            .table => {
-                std.debug.print("table: {x}", .{@intFromPtr(val.table)});
-            },
-            .userdata => {
-                std.debug.print("userdata: {x}", .{@intFromPtr(val.userdata)});
-            },
-            .thread => {
-                std.debug.print("thread: {x}", .{@intFromPtr(val.thread)});
-            },
-            .light_userdata => {
-                std.debug.print("light_userdata: {x}", .{@intFromPtr(val.light_userdata)});
-            },
-            .none => {
-                std.debug.print("none", .{});
+            else => {
+                std.debug.print("<unknown>", .{});
             },
         }
     }
