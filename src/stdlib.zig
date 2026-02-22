@@ -94,11 +94,27 @@ fn base_print(L: *LuaState) callconv(.c) i32 {
             _ = stdout_file.write("\t") catch {};
         }
         const val = L.toValue(i);
-        var buf: [4096]u8 = undefined;
-        var fbs = std.io.fixedBufferStream(&buf);
-        const writer = fbs.writer();
-        printValue(writer, val) catch {};
-        _ = stdout_file.write(buf[0..fbs.pos]) catch {};
+        switch (val) {
+            .string => |s| {
+                _ = stdout_file.write(s.asSlice()) catch {};
+            },
+            .number => |num| {
+                var buf: [64]u8 = undefined;
+                const str = std.fmt.bufPrint(&buf, "{d}", .{num}) catch "NaN";
+                _ = stdout_file.write(str) catch {};
+            },
+            .boolean => |b| {
+                _ = stdout_file.write(if (b) "true" else "false") catch {};
+            },
+            .nil => {
+                _ = stdout_file.write("nil") catch {};
+            },
+            else => {
+                var buf: [64]u8 = undefined;
+                const str = std.fmt.bufPrint(&buf, "{}", .{val}) catch "unknown";
+                _ = stdout_file.write(str) catch {};
+            },
+        }
     }
     _ = stdout_file.write("\n") catch {};
 
