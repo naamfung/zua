@@ -118,18 +118,20 @@ pub const LuaState = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        // First, clear string pool (strings will be collected by GC)
+        self.string_pool.deinit();
+        
+        // Free non-GC managed resources
+        self.allocator.free(self.stack);
+        self.base_ci.deinit(self.allocator);
+        
+        // Clear GC roots before collection to ensure all objects can be collected
+        self.gc.setRoots(.{});
+        
         // Force garbage collection to collect all objects
         self.gc.collect();
         
-        self.thread.deinit();
-        self.globals.deinit();
-        self.allocator.destroy(self.globals);
-        self.registry.deinit();
-        self.allocator.destroy(self.registry);
-        // Clear string pool (strings will be collected by GC)
-        self.string_pool.deinit();
-        self.allocator.free(self.stack);
-        self.base_ci.deinit(self.allocator);
+        // Destroy the LuaState object itself
         self.allocator.destroy(self);
     }
 

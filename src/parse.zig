@@ -755,8 +755,8 @@ pub const Parser = struct {
         if (expression.node.id == .call) {
             const call_node: *Node.Call = @alignCast(@fieldParentPtr("base", expression.node));
             call_node.is_statement = true;
-        } else {
-            // if it's not a call, then it's an assignment
+        } else if (expression.can_be_assigned_to and self.state.token.isChar('=')) {
+            // only try assignment if the expression can be assigned to and next token is '='
             expression.node = try self.assignment(expression);
         }
         return expression.node;
