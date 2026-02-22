@@ -55,18 +55,17 @@ pub fn main() !void {
 
 fn printUsage() void {
     std.debug.print(
-        \\Usage: zua [options] [file]
-        \\
-        \Options:
-        \  -i, --interactive    Start interactive REPL mode
-        \  -e, --execute CODE   Execute Lua code string
-        \  -h, --help           Show this help message
-        \\
-        \Examples:
-        \  zua script.lua       Execute a Lua file
-        \  zua -e "print(1+2)"  Execute Lua code
-        \  zua -i               Start REPL mode
-        \\n    , .{});
+        "Usage: zua [options] [file]\n\n"
+        ++ "Options:\n"
+        ++ "  -i, --interactive    Start interactive REPL mode\n"
+        ++ "  -e, --execute CODE   Execute Lua code string\n"
+        ++ "  -h, --help           Show this help message\n\n"
+        ++ "Examples:\n"
+        ++ "  zua script.lua       Execute a Lua file\n"
+        ++ "  zua -e \"print(1+2)\"  Execute Lua code\n"
+        ++ "  zua -i               Start REPL mode\n",
+        .{}
+    );
 }
 
 pub fn repl(allocator: std.mem.Allocator) !void {
