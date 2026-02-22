@@ -86,53 +86,52 @@ pub fn openBase(L: *LuaState) void {
 
 fn base_print(L: *LuaState) callconv(.c) i32 {
     const n = L.getTop();
-    const stdout = std.io.getStdOut().writer();
-    stdout.print("base_print called with {d} arguments\n", .{n}) catch {};
+    std.debug.print("base_print called with {d} arguments\n", .{n});
 
     var i: i32 = 1;
     while (i <= n) : (i += 1) {
         if (i > 1) {
-            stdout.print("\t", .{}) catch {};
+            std.debug.print("\t", .{});
         }
         const val = L.toValue(i);
-        stdout.print("{s}: ", .{L.typeName(i)}) catch {};
+        std.debug.print("{s}: ", .{L.typeName(i)});
         switch (val) {
             .string => |s| {
-                stdout.print("{s}", .{s.asSlice()}) catch {};
+                std.debug.print("{s}", .{s.asSlice()});
             },
             .number => |num| {
-                stdout.print("{d}", .{num}) catch {};
+                std.debug.print("{d}", .{num});
             },
             .boolean => |b| {
-                stdout.print("{}", .{b}) catch {};
+                std.debug.print("{}", .{b});
             },
             .nil => {
-                stdout.print("nil", .{}) catch {};
+                std.debug.print("nil", .{});
             },
             .closure => {
-                stdout.print("closure: {x}", .{@intFromPtr(val.closure)}) catch {};
+                std.debug.print("closure: {x}", .{@intFromPtr(val.closure)});
             },
             .c_closure => {
-                stdout.print("c_closure: {x}", .{@intFromPtr(val.c_closure)}) catch {};
+                std.debug.print("c_closure: {x}", .{@intFromPtr(val.c_closure)});
             },
             .table => {
-                stdout.print("table: {x}", .{@intFromPtr(val.table)}) catch {};
+                std.debug.print("table: {x}", .{@intFromPtr(val.table)});
             },
             .userdata => {
-                stdout.print("userdata: {x}", .{@intFromPtr(val.userdata)}) catch {};
+                std.debug.print("userdata: {x}", .{@intFromPtr(val.userdata)});
             },
             .thread => {
-                stdout.print("thread: {x}", .{@intFromPtr(val.thread)}) catch {};
+                std.debug.print("thread: {x}", .{@intFromPtr(val.thread)});
             },
             .light_userdata => {
-                stdout.print("light_userdata: {x}", .{@intFromPtr(val.light_userdata)}) catch {};
+                std.debug.print("light_userdata: {x}", .{@intFromPtr(val.light_userdata)});
             },
             .none => {
-                stdout.print("none", .{}) catch {};
+                std.debug.print("none", .{});
             },
         }
     }
-    stdout.print("\n", .{}) catch {};
+    std.debug.print("\n", .{});
 
     return 0;
 }
