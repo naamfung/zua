@@ -86,37 +86,52 @@ pub fn openBase(L: *LuaState) void {
 
 fn base_print(L: *LuaState) callconv(.c) i32 {
     const n = L.getTop();
-    const stdout_file = std.fs.File.stdout();
+    std.debug.print("base_print called with {d} arguments\n", .{n});
 
     var i: i32 = 1;
     while (i <= n) : (i += 1) {
         if (i > 1) {
-            _ = stdout_file.write("\t") catch {};
+            std.debug.print("\t", .{});
         }
         const val = L.toValue(i);
+        std.debug.print("{s}: ", .{L.typeName(i)});
         switch (val) {
             .string => |s| {
-                _ = stdout_file.write(s.asSlice()) catch {};
+                std.debug.print("{s}", .{s.asSlice()});
             },
             .number => |num| {
-                var buf: [64]u8 = undefined;
-                const str = std.fmt.bufPrint(&buf, "{d}", .{num}) catch "NaN";
-                _ = stdout_file.write(str) catch {};
+                std.debug.print("{d}", .{num});
             },
             .boolean => |b| {
-                _ = stdout_file.write(if (b) "true" else "false") catch {};
+                std.debug.print("{}", .{b});
             },
             .nil => {
-                _ = stdout_file.write("nil") catch {};
+                std.debug.print("nil", .{});
             },
-            else => {
-                var buf: [64]u8 = undefined;
-                const str = std.fmt.bufPrint(&buf, "{}", .{val}) catch "unknown";
-                _ = stdout_file.write(str) catch {};
+            .closure => {
+                std.debug.print("closure: {x}", .{@intFromPtr(val.closure)});
+            },
+            .c_closure => {
+                std.debug.print("c_closure: {x}", .{@intFromPtr(val.c_closure)});
+            },
+            .table => {
+                std.debug.print("table: {x}", .{@intFromPtr(val.table)});
+            },
+            .userdata => {
+                std.debug.print("userdata: {x}", .{@intFromPtr(val.userdata)});
+            },
+            .thread => {
+                std.debug.print("thread: {x}", .{@intFromPtr(val.thread)});
+            },
+            .light_userdata => {
+                std.debug.print("light_userdata: {x}", .{@intFromPtr(val.light_userdata)});
+            },
+            .none => {
+                std.debug.print("none", .{});
             },
         }
     }
-    _ = stdout_file.write("\n") catch {};
+    std.debug.print("\n", .{});
 
     return 0;
 }

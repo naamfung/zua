@@ -535,18 +535,25 @@ pub const LuaState = struct {
         _ = num_results;
         
         const old_top = self.top;
+        const func_idx = old_top - @as(usize, @intCast(num_args + 1));
+        
+        // Shift arguments to the beginning of the stack
+        for (0..@intCast(num_args)) |i| {
+            self.stack[i] = self.stack[func_idx + 1 + i];
+        }
+        
+        // Set top to number of arguments
+        self.top = @intCast(num_args);
         
         // Call the C function
         const nresults = cclosure.func(@ptrCast(self));
         
         // Adjust stack
-        const args_to_remove = @as(usize, @intCast(@max(0, num_args + 1)));
         if (nresults == 0) {
-            self.top = if (old_top > args_to_remove) old_top - args_to_remove else 0;
+            self.top = 0;
         } else {
             // Keep nresults values on stack
-            const new_top = if (old_top > args_to_remove) old_top - args_to_remove else 0;
-            self.top = new_top + @as(usize, @intCast(@max(0, nresults)));
+            self.top = @as(usize, @intCast(@max(0, nresults)));
         }
     }
 
