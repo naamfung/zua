@@ -23,20 +23,50 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     if (args.len < 2) {
+        printUsage();
+        return;
+    }
+
+    // Interactive REPL mode
+    if (std.mem.eql(u8, args[1], "-i") or std.mem.eql(u8, args[1], "--interactive")) {
         try repl(allocator);
         return;
     }
 
-    // Run a file
+    // Execute Lua string
     if (std.mem.eql(u8, args[1], "-e") or std.mem.eql(u8, args[1], "--execute")) {
         if (args.len < 3) {
             std.debug.print("Usage: zua -e \"code\"\n", .{});
             return;
         }
         try executeString(allocator, args[2]);
-    } else {
-        try runFile(allocator, args[1]);
+        return;
     }
+
+    // Show help
+    if (std.mem.eql(u8, args[1], "-h") or std.mem.eql(u8, args[1], "--help")) {
+        printUsage();
+        return;
+    }
+
+    // Run a file (default behavior)
+    try runFile(allocator, args[1]);
+}
+
+fn printUsage() void {
+    std.debug.print(
+        \\Usage: zua [options] [file]
+        \\
+        \Options:
+        \  -i, --interactive    Start interactive REPL mode
+        \  -e, --execute CODE   Execute Lua code string
+        \  -h, --help           Show this help message
+        \\
+        \Examples:
+        \  zua script.lua       Execute a Lua file
+        \  zua -e "print(1+2)"  Execute Lua code
+        \  zua -i               Start REPL mode
+        \\n    , .{});
 }
 
 pub fn repl(allocator: std.mem.Allocator) !void {
