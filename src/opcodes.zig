@@ -1,0 +1,1037 @@
+const std = @import("std");
+const zua = @import("zua.zig");
+const Token = zua.lex.Token;
+
+// From lopcodes.h:
+//
+// We assume that instructions are unsigned numbers.
+// All instructions have an opcode in the first 6 bits.
+// Instructions can have the following fields:
+//  'A': 8 bits
+//  'B': 9 bits
+//  'C': 9 bits
+//  'Bx': 18 bits ('B' and 'C' together)
+//  'sBx': signed Bx
+//
+// A signed argument is represented in excess K; that is, the number
+// value is the unsigned value minus K. K is exactly the maximum value
+// for that argument (so that -max is represented by 0, and +max is
+// represented by 2*max), which is half the maximum for the corresponding
+// unsigned argument.
+
+pub const OpCode = enum(u6) {
+    move = 0,
+    loadk = 1,
+    loadbool = 2,
+    loadnil = 3,
+    setupval = 4,
+    getglobal = 5,
+    gettable = 6,
+    setglobal = 7,
+    getupval = 8,
+    settable = 9,
+    newtable = 10,
+    self = 11,
+    add = 12,
+    sub = 13,
+    mul = 14,
+    div = 15,
+    mod = 16,
+    pow = 17,
+    unm = 18,
+    not = 19,
+    len = 20,
+    concat = 21,
+    jmp = 22,
+    eq = 23,
+    lt = 24,
+    le = 25,
+    @"test" = 26,
+    testset = 27,
+    call = 28,
+    tailcall = 29,
+    @"return" = 30,
+    tforloop = 31,
+    forloop = 32,
+    forprep = 33,
+    setlist = 34,
+    closure = 35,
+    vararg = 36,
+
+    pub fn InstructionType(op: OpCode) type {
+        return switch (op) {
+            .move => Instruction.Move,
+            .loadk => Instruction.LoadK,
+            .loadbool => Instruction.LoadBool,
+            .loadnil => Instruction.LoadNil,
+            .setupval => Instruction.SetupVal,
+            .getglobal => Instruction.GetGlobal,
+            .gettable => Instruction.GetTable,
+            .setglobal => Instruction.SetGlobal,
+            .getupval => Instruction.GetUpVal,
+            .settable => Instruction.SetTable,
+            .newtable => Instruction.NewTable,
+            .self => Instruction.Self,
+            .add, .sub, .mul, .div, .mod, .pow => Instruction.BinaryMath,
+            .unm => Instruction.UnaryMinus,
+            .not => Instruction.Not,
+            .len => Instruction.Length,
+            .concat => Instruction.Concat,
+            .jmp => Instruction.Jump,
+            .eq, .lt, .le => Instruction.Compare,
+            .@"test" => Instruction.Test,
+            .testset => Instruction.TestSet,
+            .call, .tailcall => Instruction.Call,
+            .@"return" => Instruction.Return,
+            .tforloop => Instruction.TForLoop,
+            .forloop, .forprep => Instruction.ForLoop,
+            .setlist => Instruction.SetList,
+            .closure => Instruction.Closure,
+            .vararg => Instruction.VarArg,
+        };
+    }
+
+    pub const OpMode = enum {
+        iABC,
+        iABx,
+        iAsBx,
+    };
+
+    // A mapping of OpCode -> OpMode
+    const op_modes = blk: {
+        const tag_type = @typeInfo(OpCode).@"enum".tag_type;
+        const max_fields = std.math.maxInt(tag_type);
+        var array: [max_fields]OpMode = undefined;
+        const fields = @typeInfo(OpCode).@"enum".fields;
+        for (fields) |field| {
+            const Type = @field(OpCode, field.name).InstructionType();
+            const mode: OpMode = switch (@typeInfo(Type).@"struct".fields[0].type) {
+                Instruction.ABC => .iABC,
+                Instruction.ABx => .iABx,
+                Instruction.AsBx => .iAsBx,
+                else => unreachable,
+            };
+            array[field.value] = mode;
+        }
+        break :blk array;
+    };
+
+    pub fn getOpMode(self: OpCode) OpMode {
+        return op_modes[@intFromEnum(self)];
+    }
+
+    pub const OpArgMask = enum {
+        NotUsed, // N
+        Used, // U
+        RegisterOrJumpOffset, // R
+        ConstantOrRegisterConstant, // K
+    };
+
+    pub const OpMeta = struct {
+        b_mode: OpArgMask,
+        c_mode: OpArgMask,
+        sets_register_in_a: bool,
+        test_t_mode: bool,
+    };
+
+    const op_meta = blk: {
+        const tag_type = @typeInfo(OpCode).@"enum".tag_type;
+        const max_fields = std.math.maxInt(tag_type);
+        var array: [max_fields]*const OpMeta = undefined;
+        const fields = @typeInfo(OpCode).@"enum".fields;
+        for (fields) |field| {
+            const Type = @field(OpCode, field.name).InstructionType();
+            const meta = &@field(Type, "meta");
+            array[field.value] = meta;
+        }
+        break :blk array;
+    };
+
+    pub fn getBMode(self: OpCode) OpArgMask {
+        return op_meta[@intFromEnum(self)].b_mode;
+    }
+
+    pub fn getCMode(self: OpCode) OpArgMask {
+        return op_meta[@intFromEnum(self)].c_mode;
+    }
+
+    /// If true, the instruction will set the register index specified in its `A` value
+    pub fn setsRegisterInA(self: OpCode) bool {
+        return op_meta[@intFromEnum(self)].sets_register_in_a;
+    }
+
+    // TODO rename
+    /// operator is a test
+    pub fn testTMode(self: OpCode) bool {
+        return op_meta[@intFromEnum(self)].test_t_mode;
+    }
+};
+
+// R(x) - register
+// Kst(x) - constant (in constant table)
+// RK(x) == if ISK(x) then Kst(INDEXK(x)) else R(x)
+
+/// SIZE_B define equivalent (lopcodes.h)
+const bit_size_b = 9;
+/// BITRK define equivalent (lopcodes.h)
+const rk_bit_mask_constant: u9 = 1 << (bit_size_b - 1);
+/// MAXINDEXRK define equivalent (lopcodes.h)
+pub const rk_max_constant_index: u9 = rk_bit_mask_constant - 1;
+
+/// ISK macro equivalent (lopcodes.h)
+pub fn rkIsConstant(val: u9) bool {
+    return val & rk_bit_mask_constant != 0;
+}
+
+/// INDEXK macro equivalent (lopcodes.h)
+pub fn rkGetConstantIndex(val: u9) u9 {
+    return val & ~rk_bit_mask_constant;
+}
+
+/// RKASK macro equivalent (lopcodes.h)
+pub fn constantIndexToRK(val: u9) u9 {
+    return val | rk_bit_mask_constant;
+}
+
+/// To be bit-casted depending on the op field
+pub const Instruction = packed struct {
+    op: OpCode,
+    a: u8,
+    fields: u18,
+
+    pub const ABC = packed struct {
+        op: OpCode,
+        a: u8,
+        c: u9,
+        b: u9,
+
+        pub fn init(op: OpCode, a: u8, b: u9, c: u9) Instruction.ABC {
+            return .{
+                .op = op,
+                .a = a,
+                .b = b,
+                .c = c,
+            };
+        }
+
+        pub const max_a = std.math.maxInt(u8);
+        pub const max_b = std.math.maxInt(u9);
+        pub const max_c = std.math.maxInt(u9);
+    };
+
+    pub const ABx = packed struct {
+        op: OpCode,
+        a: u8,
+        bx: u18,
+
+        pub fn init(op: OpCode, a: u8, bx: u18) Instruction.ABx {
+            return .{
+                .op = op,
+                .a = a,
+                .bx = bx,
+            };
+        }
+
+        pub const max_bx = std.math.maxInt(u18);
+    };
+
+    pub const AsBx = packed struct {
+        op: OpCode,
+        a: u8,
+        /// Underscore in the name to make it hard to accidentally use this field directly.
+        /// Stored as unsigned for binary compatibility
+        _bx: u18,
+
+        pub fn init(op: OpCode, a: u8, sbx: i18) Instruction.AsBx {
+            return .{
+                .op = op,
+                .a = a,
+                ._bx = signedBxToUnsigned(sbx),
+            };
+        }
+
+        pub fn getSignedBx(self: *const Instruction.AsBx) i18 {
+            return unsignedBxToSigned(self._bx);
+        }
+
+        pub fn setSignedBx(self: *Instruction.AsBx, val: i18) void {
+            self._bx = signedBxToUnsigned(val);
+        }
+
+        pub const max_sbx = std.math.maxInt(i18);
+        // Not std.math.minInt because of the subtraction stuff
+        pub const min_sbx = -max_sbx;
+
+        pub fn unsignedBxToSigned(Bx: u18) i18 {
+            const fitting_int = std.math.IntFittingRange(min_sbx, ABx.max_bx);
+            return @intCast(@as(fitting_int, @intCast(Bx)) - max_sbx);
+        }
+
+        pub fn signedBxToUnsigned(sBx: i18) u18 {
+            const fitting_int = std.math.IntFittingRange(min_sbx, ABx.max_bx);
+            return @intCast(@as(fitting_int, @intCast(sBx)) + max_sbx);
+        }
+    };
+
+    /// R(A) := R(B)
+    pub const Move = packed struct {
+        /// really only A B
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .RegisterOrJumpOffset,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+    };
+
+    /// R(A) := Kst(Bx)
+    pub const LoadK = packed struct {
+        instruction: Instruction.ABx,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .ConstantOrRegisterConstant,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+
+        pub fn init(result_reg: u8, constant_index: u18) LoadK {
+            return .{
+                .instruction = Instruction.ABx.init(
+                    .loadk,
+                    result_reg,
+                    constant_index,
+                ),
+            };
+        }
+    };
+
+    /// R(A) := (Bool)B; if (C) pc++
+    pub const LoadBool = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .Used,
+            .c_mode = .Used,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+
+        pub fn init(result_reg: u8, val: bool, does_jump: bool) LoadBool {
+            return .{
+                .instruction = Instruction.ABC.init(
+                    .loadbool,
+                    result_reg,
+                    @intFromBool(val),
+                    @intFromBool(does_jump),
+                ),
+            };
+        }
+
+        pub fn doesJump(self: *const LoadBool) bool {
+            return self.instruction.c != 0;
+        }
+    };
+
+    /// R(A) := ... := R(B) := nil
+    pub const LoadNil = packed struct {
+        /// really only A B
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .RegisterOrJumpOffset,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+
+        /// Note: reg_range_start and reg_range_end are both inclusive,
+        /// so for setting a single register start and end should
+        /// be equal
+        pub fn init(reg_range_start: u8, reg_range_end: u9) LoadNil {
+            std.debug.assert(reg_range_end >= reg_range_start);
+            return .{
+                .instruction = Instruction.ABC.init(
+                    .loadnil,
+                    reg_range_start,
+                    reg_range_end,
+                    0,
+                ),
+            };
+        }
+
+        pub fn assignsToMultipleRegisters(self: LoadNil) bool {
+            return self.instruction.a != @as(u8, @truncate(self.instruction.b));
+        }
+
+        pub fn willAssignToRegister(self: LoadNil, reg: u8) bool {
+            return reg >= self.instruction.a and reg <= self.instruction.b;
+        }
+    };
+
+    /// R(A) := Gbl[Kst(Bx)]
+    pub const GetGlobal = packed struct {
+        instruction: Instruction.ABx,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .ConstantOrRegisterConstant,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+
+        pub fn init(result_reg: u8, name_constant_index: u18) GetGlobal {
+            return .{
+                .instruction = .{
+                    .op = .getglobal,
+                    .a = result_reg,
+                    .bx = name_constant_index,
+                },
+            };
+        }
+    };
+
+    /// R(A) := R(B)[RK(C)]
+    pub const GetTable = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .RegisterOrJumpOffset,
+            .c_mode = .ConstantOrRegisterConstant,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+
+        pub fn init(result_reg: u8, table_reg: u9, key_rk: u9) GetTable {
+            return .{
+                .instruction = .{
+                    .op = .gettable,
+                    .a = result_reg,
+                    .b = table_reg,
+                    .c = key_rk,
+                },
+            };
+        }
+    };
+
+    /// Gbl[Kst(Bx)] := R(A)
+    pub const SetGlobal = packed struct {
+        instruction: Instruction.ABx,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .ConstantOrRegisterConstant,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = false,
+            .test_t_mode = false,
+        };
+
+        pub fn init(name_constant_index: u18, source_reg: u8) SetGlobal {
+            return .{
+                .instruction = .{
+                    .op = .setglobal,
+                    .a = source_reg,
+                    .bx = name_constant_index,
+                },
+            };
+        }
+    };
+
+    /// R(A)[RK(B)] := RK(C)
+    pub const SetTable = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .ConstantOrRegisterConstant,
+            .c_mode = .ConstantOrRegisterConstant,
+            .sets_register_in_a = false,
+            .test_t_mode = false,
+        };
+
+        pub fn init(table_reg: u8, key_rk: u9, val_rk: u9) SetTable {
+            return .{
+                .instruction = Instruction.ABC.init(
+                    .settable,
+                    table_reg,
+                    key_rk,
+                    val_rk,
+                ),
+            };
+        }
+    };
+
+    /// R(A) := {} (size = B,C)
+    pub const NewTable = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .Used,
+            .c_mode = .Used,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+
+        pub fn setArraySize(self: *NewTable, num: zua.object.FloatingPointByteIntType) void {
+            self.instruction.b = @intCast(zua.object.intToFloatingPointByte(num));
+        }
+
+        pub fn setTableSize(self: *NewTable, num: zua.object.FloatingPointByteIntType) void {
+            self.instruction.c = @intCast(zua.object.intToFloatingPointByte(num));
+        }
+    };
+
+    /// R(A+1) := R(B); R(A) := R(B)[RK(C)]
+    pub const Self = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .RegisterOrJumpOffset,
+            .c_mode = .ConstantOrRegisterConstant,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+
+        /// Stores the function (gotten from table[key]) in `setup_reg_start`
+        /// and the table itself in `setup_reg_start + 1`
+        pub fn init(setup_reg_start: u8, table_reg: u9, key_rk: u9) Self {
+            return .{ .instruction = .{
+                .op = .self,
+                .a = setup_reg_start,
+                .b = table_reg,
+                .c = key_rk,
+            } };
+        }
+    };
+
+    /// R(A) := RK(B) <operation> RK(C)
+    pub const BinaryMath = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .ConstantOrRegisterConstant,
+            .c_mode = .ConstantOrRegisterConstant,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+
+        pub fn init(op: OpCode, result_reg: u8, left_rk: u9, right_rk: u9) BinaryMath {
+            return .{
+                .instruction = Instruction.ABC.init(
+                    op,
+                    result_reg,
+                    left_rk,
+                    right_rk,
+                ),
+            };
+        }
+
+        pub fn tokenToOpCode(token: Token) OpCode {
+            return switch (token.char.?) {
+                '+' => .add,
+                '-' => .sub,
+                '*' => .mul,
+                '/' => .div,
+                '%' => .mod,
+                '^' => .pow,
+                else => unreachable,
+            };
+        }
+    };
+
+    /// R(A) := -R(B)
+    pub const UnaryMinus = packed struct {
+        /// really only A B
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .RegisterOrJumpOffset,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+    };
+
+    /// R(A) := not R(B)
+    pub const Not = packed struct {
+        /// really only A B
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .RegisterOrJumpOffset,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+
+        pub fn init(result_reg: u8, value_reg: u9) Not {
+            return .{
+                .instruction = Instruction.ABC.init(
+                    .not,
+                    result_reg,
+                    value_reg,
+                    0,
+                ),
+            };
+        }
+    };
+
+    /// R(A) := length of R(B)
+    pub const Length = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .RegisterOrJumpOffset,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+    };
+
+    /// R(A) := R(B).. ... ..R(C)
+    pub const Concat = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .RegisterOrJumpOffset,
+            .c_mode = .RegisterOrJumpOffset,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+
+        pub fn init(result_reg: u8, start_reg: u9, end_reg: u9) Concat {
+            std.debug.assert(end_reg > start_reg);
+            return .{ .instruction = .{
+                .op = .concat,
+                .a = result_reg,
+                .b = start_reg,
+                .c = end_reg,
+            } };
+        }
+
+        pub fn getStartReg(self: Concat) u9 {
+            return self.instruction.b;
+        }
+
+        pub fn setStartReg(self: *Concat, start_reg: u9) void {
+            self.instruction.b = start_reg;
+        }
+
+        pub fn getEndReg(self: Concat) u9 {
+            return self.instruction.c;
+        }
+
+        pub fn setEndReg(self: *Concat, end_reg: u9) void {
+            self.instruction.c = end_reg;
+        }
+
+        pub fn numConcattedValues(self: Concat) u9 {
+            return (self.instruction.c - self.instruction.b) + 1;
+        }
+    };
+
+    /// pc+=sBx
+    pub const Jump = packed struct {
+        /// really only sBx
+        instruction: Instruction.AsBx,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .RegisterOrJumpOffset,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = false,
+            .test_t_mode = false,
+        };
+
+        pub fn init(offset: ?i18) Jump {
+            const instruction = Instruction.AsBx.init(.jmp, 0, 0);
+            var jmp: Jump = @bitCast(instruction);
+            jmp.setOffset(offset);
+            return jmp;
+        }
+
+        /// -1 can be used to represent 'no jump' here because that would mean that an instruction
+        /// is jumping to itself, which is obviously not something we'd ever want to do
+        const no_jump = -1;
+
+        pub fn getOffset(self: *const Jump) ?i18 {
+            const sbx = self.instruction.getSignedBx();
+            if (sbx == no_jump) return null;
+            return sbx;
+        }
+
+        pub fn setOffset(self: *Jump, offset: ?i18) void {
+            self.instruction.setSignedBx(offset orelse no_jump);
+        }
+
+        pub fn offsetToAbsolute(pc: usize, offset: i18) usize {
+            return @intCast(@as(isize, @intCast(pc + 1)) + offset);
+        }
+    };
+
+    /// if ((RK(B) op RK(C)) ~= A) then pc++
+    /// for eq, lt, le
+    pub const Compare = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .ConstantOrRegisterConstant,
+            .c_mode = .ConstantOrRegisterConstant,
+            .sets_register_in_a = false,
+            .test_t_mode = true,
+        };
+
+        pub fn init(op: OpCode, invert: bool, left_rk: u9, right_rk: u9) Compare {
+            return .{
+                .instruction = Instruction.ABC.init(
+                    op,
+                    @intFromBool(invert),
+                    left_rk,
+                    right_rk,
+                ),
+            };
+        }
+
+        pub fn isInverted(self: *const Compare) bool {
+            return self.instruction.a != 0;
+        }
+    };
+
+    /// if not (R(A) <=> C) then pc++
+    pub const Test = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .NotUsed,
+            .c_mode = .Used,
+            .sets_register_in_a = false,
+            .test_t_mode = true,
+        };
+
+        pub fn init(reg: u8, test_value: bool) Test {
+            return .{
+                .instruction = Instruction.ABC.init(
+                    .@"test",
+                    reg,
+                    0,
+                    @intFromBool(test_value),
+                ),
+            };
+        }
+    };
+
+    /// if (R(B) <=> C) then R(A) := R(B) else pc++
+    pub const TestSet = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .RegisterOrJumpOffset,
+            .c_mode = .Used,
+            .sets_register_in_a = true,
+            .test_t_mode = true,
+        };
+
+        pub fn init(result_reg: u8, test_reg: u9, test_value: bool) TestSet {
+            return .{
+                .instruction = Instruction.ABC.init(
+                    .testset,
+                    result_reg,
+                    test_reg,
+                    @intFromBool(test_value),
+                ),
+            };
+        }
+    };
+
+    /// R(A) := UpValue[B]
+    pub const GetUpVal = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .Used,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+    };
+
+    /// UpValue[B] := R(A)
+    pub const SetupVal = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .Used,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = false,
+            .test_t_mode = false,
+        };
+    };
+
+    /// Used for both call and tailcall opcodes
+    /// call: R(A), ... ,R(A+C-2) := R(A)(R(A+1), ... ,R(A+B-1))
+    /// tailcall: return R(A)(R(A+1), ... ,R(A+B-1))
+    pub const Call = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .Used,
+            .c_mode = .Used,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+
+        pub fn init(result_reg_start: u8, num_params: u9, num_return_values: ?u9) Call {
+            const c_val = if (num_return_values != null) num_return_values.? + 1 else 0;
+            return .{
+                .instruction = Instruction.ABC.init(
+                    .call,
+                    result_reg_start,
+                    num_params + 1,
+                    c_val,
+                ),
+            };
+        }
+
+        pub fn getNumParams(self: Call) u9 {
+            return self.instruction.b - 1;
+        }
+
+        pub fn setResultRegStart(self: *Call, base_reg: u8) void {
+            self.instruction.a = base_reg;
+        }
+
+        pub fn getResultRegStart(self: *const Call) u8 {
+            return self.instruction.a;
+        }
+
+        pub fn getResultRegEnd(self: *const Call) ?u9 {
+            if (self.getNumReturnValues()) |return_vals| {
+                if (return_vals > 0) {
+                    return self.getResultRegStart() + return_vals - 1;
+                } else {
+                    return null;
+                }
+            } else {
+                return null;
+            }
+        }
+
+        pub fn setNumReturnValues(self: *Call, num_return_values: ?u9) void {
+            if (num_return_values) |v| {
+                self.instruction.c = v + 1;
+            } else {
+                self.instruction.c = 0;
+            }
+        }
+
+        pub fn getNumReturnValues(self: *const Call) ?u9 {
+            if (self.isMultipleReturns()) return null;
+            return self.instruction.c - 1;
+        }
+
+        pub fn isMultipleReturns(self: *const Call) bool {
+            return self.instruction.c == 0;
+        }
+    };
+
+    /// return R(A), ... ,R(A+B-2)
+    /// if (B == 0) then return up to `top'
+    pub const Return = packed struct {
+        /// really only A B
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .Used,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = false,
+            .test_t_mode = false,
+        };
+
+        pub fn init(first_return_value_register: u8, num_return_values: ?u9) Return {
+            const b_val = if (num_return_values != null) num_return_values.? + 1 else 0;
+            return .{
+                .instruction = Instruction.ABC.init(
+                    .@"return",
+                    first_return_value_register,
+                    b_val,
+                    0,
+                ),
+            };
+        }
+
+        pub fn getFirstReturnValueRegister(self: *const Return) u8 {
+            return self.instruction.a;
+        }
+
+        pub fn setFirstReturnValueRegister(self: *Return, first_return_value_register: u8) void {
+            self.instruction.a = first_return_value_register;
+        }
+
+        pub fn setNumReturnValues(self: *Return, num_return_values: ?u9) void {
+            if (num_return_values) |v| {
+                self.instruction.b = v + 1;
+            } else {
+                self.instruction.b = 0;
+            }
+        }
+
+        pub fn getNumReturnValues(self: *const Return) ?u9 {
+            if (self.isMultipleReturns()) return null;
+            return self.instruction.b - 1;
+        }
+
+        pub fn isMultipleReturns(self: *const Return) bool {
+            return self.instruction.b == 0;
+        }
+    };
+
+    /// R(A), R(A+1), R(A+2) = R(A+3), R(A+4), R(A+5)
+    /// R(A+4) = R(A+3)[R(A+5)] - iterate
+    pub const TForLoop = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .NotUsed,
+            .c_mode = .Used,
+            .sets_register_in_a = false,
+            .test_t_mode = false,
+        };
+    };
+
+    /// R(A) += R(A+2); if R(A) <?= R(A+1) then pc+=sBx
+    pub const ForLoop = packed struct {
+        instruction: Instruction.AsBx,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .NotUsed,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+    };
+
+    /// R(A)[(C-1)*FPF+i] := R(A+i), 1 <= i <= B
+    /// if (B == 0) then B = `top'
+    /// if (C == 0) then next `instruction' is real C
+    pub const SetList = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .Used,
+            .c_mode = .Used,
+            .sets_register_in_a = false,
+            .test_t_mode = false,
+        };
+
+        pub const batch_num_in_next_instruction = 0;
+
+        pub fn init(table_reg: u8, num_values: usize, to_store: ?usize) SetList {
+            const flush_batch_num: usize = SetList.numValuesToFlushBatchNum(num_values);
+            const num_values_in_batch: u9 = if (to_store == null) 0 else @intCast(to_store.?);
+            const c_val: u9 = if (flush_batch_num <= Instruction.ABC.max_c)
+                @intCast(flush_batch_num)
+            else
+                batch_num_in_next_instruction;
+
+            return .{ .instruction = .{
+                .op = .setlist,
+                .a = table_reg,
+                .b = num_values_in_batch,
+                .c = c_val,
+            } };
+        }
+
+        pub fn numValuesToFlushBatchNum(num_values: usize) usize {
+            return (num_values - 1) / Instruction.SetList.fields_per_flush + 1;
+        }
+
+        pub fn isBatchNumberStoredInNextInstruction(self: *const SetList) bool {
+            return self.instruction.c == 0;
+        }
+
+        /// equivalent to LFIELDS_PER_FLUSH from lopcodes.h
+        pub const fields_per_flush = 50;
+    };
+
+    /// R(A) := closure(Kst[Bx])
+    pub const Closure = packed struct {
+        instruction: Instruction.ABx,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .ConstantOrRegisterConstant,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+
+        pub fn init(result_reg: u8, proto_index: u18) Closure {
+            return .{
+                .instruction = Instruction.ABx.init(
+                    .closure,
+                    result_reg,
+                    proto_index,
+                ),
+            };
+        }
+    };
+
+    /// R(A), R(A+1), ..., R(A+B-1) = vararg
+    pub const VarArg = packed struct {
+        instruction: Instruction.ABC,
+
+        pub const meta: OpCode.OpMeta = .{
+            .b_mode = .Used,
+            .c_mode = .NotUsed,
+            .sets_register_in_a = true,
+            .test_t_mode = false,
+        };
+
+        pub fn init(first_return_value_register: u8, num_return_values: ?u9) VarArg {
+            const b_val = if (num_return_values != null) num_return_values.? + 1 else 0;
+            return .{
+                .instruction = Instruction.ABC.init(
+                    .vararg,
+                    first_return_value_register,
+                    b_val,
+                    0,
+                ),
+            };
+        }
+
+        pub fn getFirstReturnValueRegister(self: *const VarArg) u8 {
+            return self.instruction.a;
+        }
+
+        pub fn setFirstReturnValueRegister(self: *VarArg, first_return_value_register: u8) void {
+            self.instruction.a = first_return_value_register;
+        }
+
+        pub fn setNumReturnValues(self: *VarArg, num_return_values: ?u9) void {
+            if (num_return_values) |v| {
+                self.instruction.b = v + 1;
+            } else {
+                self.instruction.b = 0;
+            }
+        }
+
+        pub fn getNumReturnValues(self: *const VarArg) ?u9 {
+            if (self.isMultipleReturns()) return null;
+            return self.instruction.b - 1;
+        }
+
+        pub fn isMultipleReturns(self: *const VarArg) bool {
+            return self.instruction.b == 0;
+        }
+    };
+};
+
+test "sBx" {
+    try std.testing.expectEqual(
+        @as(i18, Instruction.AsBx.min_sbx),
+        Instruction.AsBx.unsignedBxToSigned(0),
+    );
+    const max_sbx_as_bx = Instruction.AsBx.signedBxToUnsigned(Instruction.AsBx.max_sbx);
+    try std.testing.expectEqual(
+        @as(i18, Instruction.AsBx.max_sbx),
+        Instruction.AsBx.unsignedBxToSigned(max_sbx_as_bx),
+    );
+}

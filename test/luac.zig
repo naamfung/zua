@@ -1,0 +1,96 @@
+//! A library interface to luaU_dump
+//! Intended to be useful for testing against the bytecode output of luac
+
+const c = @cImport({
+    @cInclude("lauxlib.h");
+    @cInclude("lua.h");
+    @cInclude("lundump.h");
+    @cInclude("lstate.h");
+});
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+
+// need a non-opaque struct definition to get at the `top` field
+const lua_State = extern struct {
+    // common header
+    next: ?*anyopaque,
+    tt: u8,
+    marked: u8,
+    // lua_State
+    status: u8,
+    top: c.StkId,
+    // rest is irrelevant for our purposes
+};
+
+pub fn loadAndDumpAlloc(allocator: Allocator, chunk: [:0]const u8) ![]const u8 {
+    const L: *c.lua_State = open: {
+        break :open c.lua_open() orelse return error.OutOfMemory;
+    };
+    defer c.lua_close(L);
+
+    const load_result = c.luaL_loadstring(L, chunk.ptr);
+    switch (load_result) {
+        0 => {},
+        c.LUA_ERRSYNTAX => return error.SyntaxError,
+        c.LUA_ERRMEM => return error.OutOfMemory,
+        else => unreachable,
+    }
+    std.debug.assert(c.lua_type(L, -1) == c.LUA_TFUNCTION);
+
+    // get the proto (this should be equivalent to `toproto(L,-1)` in luac.c)
+    const concrete_state: *lua_State = @ptrCast(@alignCast(L));
+    const first_free_slot_in_stack = concrete_state.top;
+    const top_of_stack: *c.lua_TValue = first_free_slot_in_stack - 1;
+    const gc: *c.GCObject = top_of_stack.value.gc;
+    const proto = gc.cl.l.p;
+
+    var output = std.ArrayList(u8){};
+    errdefer output.deinit(allocator);
+
+    const Context = struct {
+        array_list: *std.ArrayList(u8),
+        allocator: Allocator,
+    };
+    var ctx = Context{ .array_list = &output, .allocator = allocator };
+
+    const strip = true;
+    const dump_result = c.luaU_dump(
+        L,
+        proto,
+        luaWriterArrayList,
+        &ctx,
+        if (strip) 1 else 0,
+    );
+    if (dump_result != 0) {
+        return error.DumpError;
+    }
+
+    return output.toOwnedSlice(allocator);
+}
+
+fn luaWriterArrayList(
+    L: ?*c.lua_State,
+    p: ?*const anyopaque,
+    sz: usize,
+    ud: ?*anyopaque,
+) callconv(.c) c_int {
+    _ = L;
+    const Context = struct {
+        array_list: *std.ArrayList(u8),
+        allocator: Allocator,
+    };
+    const ctx: *Context = @ptrCast(@alignCast(ud.?));
+    const slice = @as([*]const u8, @ptrCast(p.?))[0..sz];
+    ctx.array_list.appendSlice(ctx.allocator, slice) catch return 1;
+    return 0;
+}
+
+test {
+    const allocator = std.testing.allocator;
+
+    const bytecode = try loadAndDumpAlloc(allocator, "print \"hello world\"");
+    defer allocator.free(bytecode);
+
+    const expected_bytecode = "\x1bLuaQ\x00\x01\x04\x08\x04\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x02\x04\x00\x00\x00\x05\x00\x00\x00A@\x00\x00\x1c@\x00\x01\x1e\x00\x80\x00\x02\x00\x00\x00\x04\x06\x00\x00\x00\x00\x00\x00\x00print\x00\x04\x0c\x00\x00\x00\x00\x00\x00\x00hello world\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+    try std.testing.expectEqualSlices(u8, expected_bytecode, bytecode);
+}
