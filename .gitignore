@@ -1,3 +1,7 @@
 .zig-cache/
+.qoder/
+zig-cache/
 zig-out/
-*.o
+lua/
+tmp/
+*.tar.gz
